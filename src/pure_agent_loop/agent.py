@@ -6,6 +6,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, AsyncIterator, Iterator, Literal
 
 from .events import Event, EventType
@@ -71,6 +72,7 @@ class Agent:
         temperature: 温度参数
         thinking_level: 思考深度（off/low/medium/high），默认 off
         emit_reasoning_events: 是否推送 REASONING 事件，默认 False
+        skills_dir: Skill 目录路径（支持字符串或列表）
         **llm_kwargs: 透传给 LLM 调用的额外参数
     """
 
@@ -88,6 +90,7 @@ class Agent:
         temperature: float = 0.7,
         thinking_level: ThinkingLevel = "off",
         emit_reasoning_events: bool = False,
+        skills_dir: str | list[str] | None = None,
         **llm_kwargs: Any,
     ):
         # 保存思考模式配置
@@ -124,6 +127,35 @@ class Agent:
         self._retry = retry or RetryConfig()
         self._llm_kwargs: dict[str, Any] = {"temperature": temperature, **llm_kwargs}
 
+        # 初始化 Skill 系统（仅创建注册表；实际扫描与工具注册延迟到首次运行）
+        self._skill_registry = None
+        self._skills_initialized = False
+        if skills_dir:
+            from .skill.registry import SkillRegistry
+
+            if isinstance(skills_dir, str):
+                dirs = [Path(skills_dir)]
+            else:
+                dirs = [Path(d) for d in skills_dir]
+            self._skill_registry = SkillRegistry(dirs)
+
+    async def _ensure_skills_initialized(self) -> None:
+        """确保 Skill 系统已初始化"""
+        if self._skills_initialized:
+            return
+
+        if self._skill_registry:
+            await self._skill_registry.initialize()
+
+            # 动态创建 skill 工具并注册
+            if self._skill_registry.size > 0:
+                from .skill.tool import create_skill_tool
+
+                skill_tool = create_skill_tool(self._skill_registry)
+                self._tool_registry.register(skill_tool)
+
+        self._skills_initialized = True
+
     def _create_loop(self) -> ReactLoop:
         """创建循环引擎实例"""
         return ReactLoop(
@@ -150,6 +182,7 @@ class Agent:
         Yields:
             Event: 执行过程中的结构化事件
         """
+        await self._ensure_skills_initialized()
         loop = self._create_loop()
         async for event in loop.run(
             task=task,

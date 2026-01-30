@@ -21,6 +21,7 @@ from .errors import (
 )
 from .builtin_tools import TodoItem, TodoStore
 from .prompts import build_system_prompt
+from .skill import SkillRegistry, SkillInfo, create_skill_tool
 
 # 思考深度类型别名（供用户类型提示使用）
 ThinkingLevel = Literal["off", "low", "medium", "high"]
@@ -57,6 +58,10 @@ __all__ = [
     "TodoStore",
     # 提示词
     "build_system_prompt",
+    # Skill 系统
+    "SkillRegistry",
+    "SkillInfo",
+    "create_skill_tool",
     # 类型
     "ThinkingLevel",
 ]
