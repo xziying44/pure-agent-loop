@@ -1,9 +1,17 @@
-"""Exa 搜索示例: 使用 Exa AI 进行网页搜索（流式事件输出）
+"""Exa 搜索示例: 使用 Exa AI 进行网页搜索（流式事件输出 + 思考模式）
 
 使用前请先安装依赖并配置环境变量:
     pip install python-dotenv requests rich
     cp .env.example .env
     # 编辑 .env 填入 API_KEY 和 EXA_API_KEY
+
+支持的思考模式（通过 THINKING_LEVEL 环境变量配置）:
+    off    - 关闭思考模式（默认）
+    low    - 低深度思考
+    medium - 中等深度思考
+    high   - 高深度思考
+
+注意: 思考模式需要支持推理的模型（如 DeepSeek-R1, o1, o3 等）
 """
 
 import asyncio
@@ -13,7 +21,7 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-from pure_agent_loop import Agent, tool
+from pure_agent_loop import Agent, tool, ThinkingLevel
 from rich_renderer import RichRenderer
 
 # 加载 examples/.env 配置
@@ -105,6 +113,13 @@ async def main():
         print("错误: 请在 .env 文件中配置 EXA_API_KEY")
         return
 
+    # 获取思考模式配置
+    thinking_level: ThinkingLevel = os.getenv("THINKING_LEVEL", "off")  # type: ignore
+    emit_reasoning = thinking_level != "off"
+
+    if emit_reasoning:
+        print(f"🧠 思考模式已启用: {thinking_level}")
+
     agent = Agent(
         name="搜索助手",
         model=os.getenv("MODEL", "deepseek-chat"),
@@ -112,6 +127,8 @@ async def main():
         base_url=os.getenv("BASE_URL", "https://api.deepseek.com/v1"),
         tools=[exa_search, calculate],
         system_prompt="你是一个专业的搜索助手。当用户询问信息时，使用 exa_search 工具搜索最新的网页内容，并根据搜索结果回答问题。回答时请注明信息来源。",
+        thinking_level=thinking_level,
+        emit_reasoning_events=emit_reasoning,
     )
 
     # 测试查询
@@ -124,6 +141,7 @@ async def main():
         max_thought_lines=3,      # 思考内容最多显示3行
         max_result_chars=150,     # 工具结果最多显示150字符
         show_todo_table=True,     # 用表格显示 Todo 列表
+        max_reasoning_lines=15,   # 推理内容最多显示15行
     )
 
     # 流式执行，实时输出事件

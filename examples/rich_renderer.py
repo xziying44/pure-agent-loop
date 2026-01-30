@@ -38,6 +38,7 @@ class RichRenderer:
         "soft_limit": "orange1",
         "loop": "blue",
         "todo": "magenta",
+        "reasoning": "bright_magenta",  # 推理内容颜色
     }
 
     # 图标配置
@@ -50,6 +51,7 @@ class RichRenderer:
         EventType.ERROR: "❌",
         EventType.LOOP_END: "✅",
         EventType.TODO_UPDATE: "📝",
+        EventType.REASONING: "🧠",  # 推理事件图标
     }
 
     def __init__(
@@ -59,6 +61,7 @@ class RichRenderer:
         max_result_chars: int = 150,
         show_todo_table: bool = True,
         compact_mode: bool = False,
+        max_reasoning_lines: int = 10,
     ):
         """初始化渲染器
 
@@ -68,12 +71,14 @@ class RichRenderer:
             max_result_chars: 工具结果最大显示字符数
             show_todo_table: 是否用表格显示 Todo 列表
             compact_mode: 紧凑模式，减少空白行
+            max_reasoning_lines: 推理内容最大显示行数
         """
         self.console = console or Console()
         self.max_thought_lines = max_thought_lines
         self.max_result_chars = max_result_chars
         self.show_todo_table = show_todo_table
         self.compact_mode = compact_mode
+        self.max_reasoning_lines = max_reasoning_lines
 
         # 跟踪上一次 Todo 列表状态，避免重复显示
         self._last_todos: list[dict] | None = None
@@ -101,6 +106,8 @@ class RichRenderer:
                 self._render_loop_end(event)
             case EventType.TODO_UPDATE:
                 self._render_todo_update(event)
+            case EventType.REASONING:
+                self._render_reasoning(event)
             case _:
                 self._render_unknown(event)
 
@@ -129,6 +136,31 @@ class RichRenderer:
         if not self.compact_mode:
             self.console.print()
         self.console.print(text)
+
+    def _render_reasoning(self, event: Event) -> None:
+        """渲染推理过程事件（模型内部思考链）"""
+        content = event.data.get("content", "")
+
+        # 折叠过长的推理内容
+        lines = content.split("\n")
+        if len(lines) > self.max_reasoning_lines:
+            display_lines = lines[: self.max_reasoning_lines]
+            remaining = len(lines) - self.max_reasoning_lines
+            display_content = "\n".join(display_lines) + f"\n... (+{remaining} 行)"
+        else:
+            display_content = content
+
+        panel = Panel(
+            Text(display_content, style=self.COLORS["reasoning"]),
+            title=f"{self.ICONS[EventType.REASONING]} 推理过程",
+            title_align="left",
+            border_style=self.COLORS["reasoning"],
+            padding=(0, 1),
+        )
+
+        if not self.compact_mode:
+            self.console.print()
+        self.console.print(panel)
 
     def _render_action(self, event: Event) -> None:
         """渲染工具调用事件"""
