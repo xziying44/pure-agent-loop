@@ -42,3 +42,13 @@ class TestBuildSystemPrompt:
         """提示词应包含角色描述段"""
         prompt = build_system_prompt()
         assert "# Role" in prompt or "# 角色" in prompt
+
+    def test_system_prompt_includes_parallel_tool_guidance(self):
+        """系统提示词应包含并行工具调用引导"""
+        prompt = build_system_prompt()
+
+        # 检查关键内容
+        assert "高效工具使用" in prompt
+        assert "并行调用" in prompt
+        assert "多角度搜索" in prompt
+        assert "不适合并行调用" in prompt

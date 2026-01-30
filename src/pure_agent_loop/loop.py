@@ -3,6 +3,7 @@
 实现 Thought → Action → Observation 的循环流程。
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -46,6 +47,23 @@ class ReactLoop:
         self._retry_handler = RetryHandler(retry)
         self._llm_kwargs = llm_kwargs or {}
         self._todo_store = todo_store
+
+    async def _execute_with_timing(
+        self, name: str, arguments: dict[str, Any]
+    ) -> tuple[str, float]:
+        """执行单个工具并计时
+
+        Args:
+            name: 工具名称
+            arguments: 工具参数
+
+        Returns:
+            (执行结果, 耗时秒数)
+        """
+        start_time = time.time()
+        result = await self._tools.execute(name, arguments)
+        duration = time.time() - start_time
+        return result, duration
 
     async def run(
         self,
@@ -134,14 +152,19 @@ class ReactLoop:
                 ]
                 msg_history.append(assistant_msg)
 
-                # ---- 执行工具 ----
+                # ---- 执行工具（并行） ----
+                # 1. 先产出所有 ACTION 事件
                 for tc in response.tool_calls:
                     yield Event.action(step=step, tool=tc.name, args=tc.arguments)
 
-                    start_time = time.time()
-                    result = await self._tools.execute(tc.name, tc.arguments)
-                    duration = time.time() - start_time
+                # 2. 并行执行所有工具
+                results_with_timing = await asyncio.gather(*[
+                    self._execute_with_timing(tc.name, tc.arguments)
+                    for tc in response.tool_calls
+                ])
 
+                # 3. 批量产出 OBSERVATION 事件并更新消息历史
+                for tc, (result, duration) in zip(response.tool_calls, results_with_timing):
                     yield Event.observation(
                         step=step, tool=tc.name, result=result, duration=duration
                     )
