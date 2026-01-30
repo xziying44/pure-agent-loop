@@ -143,18 +143,12 @@ async def main():
         base_url=os.getenv("BASE_URL", "https://api.deepseek.com/v1"),
         tools=[exa_search, fetch_webpage],
         skills_dir=str(Path(__file__).parent / "skills"),
-        system_prompt=(
-            "你是一个专业的助手。\n\n"
-            "工作原则：\n"
-            "1. 如果任务涉及网络搜索或信息检索，请先使用 skill 工具加载 'web-search' 技能获取详细指导\n"
-            "2. 根据技能指导合理使用工具\n"
-            "3. 注明信息来源"
-        ),
+        system_prompt="你是一个专业的信息检索助手，擅长搜索和整理网络信息。回答时请注明信息来源。",
         thinking_level=thinking_level,
         emit_reasoning_events=thinking_level != "off",
     )
 
-    query = "我想了解一下灵迹岛这款桌游的规则"
+    query = "灵迹岛中放置污染的时候，是所有人的灵迹都被摧毁，还是只摧毁一个？"
     print(f"\n🔍 查询: {query}\n")
     print("=" * 60)
 

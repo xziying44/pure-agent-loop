@@ -49,6 +49,14 @@ class TestBuildSystemPrompt:
 
         # 检查关键内容
         assert "高效工具使用" in prompt
-        assert "并行调用" in prompt
-        assert "多角度搜索" in prompt
-        assert "不适合并行调用" in prompt
+        assert "相互独立" in prompt
+        assert "并行返回" in prompt
+
+    def test_system_prompt_includes_skill_guidance(self):
+        """系统提示词应包含技能加载引导"""
+        prompt = build_system_prompt()
+
+        # 检查关键内容
+        assert "技能加载" in prompt
+        assert "调用 skill" in prompt
+        assert "不写入 Todo" in prompt
