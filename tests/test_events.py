@@ -102,3 +102,26 @@ class TestEventTypeTodoUpdate:
     def test_todo_update_type_exists(self):
         """应该存在 TODO_UPDATE 事件类型"""
         assert EventType.TODO_UPDATE.value == "todo_update"
+
+
+class TestEventTypeReasoning:
+    """REASONING 事件类型测试"""
+
+    def test_reasoning_type_exists(self):
+        """应该存在 REASONING 事件类型"""
+        assert EventType.REASONING.value == "reasoning"
+
+    def test_reasoning_event_factory(self):
+        """应该有 reasoning 工厂方法"""
+        event = Event.reasoning(step=1, content="让我分析一下这个问题...")
+        assert event.type == EventType.REASONING
+        assert event.step == 1
+        assert event.data["content"] == "让我分析一下这个问题..."
+
+    def test_reasoning_event_to_dict(self):
+        """REASONING 事件应该能正确序列化"""
+        event = Event.reasoning(step=2, content="推理内容")
+        d = event.to_dict()
+        assert d["type"] == "reasoning"
+        assert d["step"] == 2
+        assert d["data"]["content"] == "推理内容"

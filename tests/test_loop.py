@@ -476,3 +476,96 @@ class TestReactLoop:
         # 两者差距应该明显
         assert durations["slow_tool"] > durations["fast_tool"] * 2, \
             "slow_tool 耗时应该明显大于 fast_tool"
+
+
+class TestReactLoopReasoningEvent:
+    """ReactLoop REASONING 事件测试"""
+
+    async def test_reasoning_event_emitted_when_enabled(self):
+        """当 emit_reasoning_events=True 且有 reasoning_content 时应该产出 REASONING 事件"""
+        # 创建模拟 LLM，返回包含 reasoning_content 的响应
+        mock_llm = MockLLM([
+            LLMResponse(
+                content="最终回答",
+                tool_calls=[],
+                usage=TokenUsage(prompt_tokens=10, completion_tokens=20, total_tokens=30),
+                raw={},
+                reasoning_content="这是推理过程...",
+            )
+        ])
+
+        registry = ToolRegistry()
+        loop = ReactLoop(
+            llm=mock_llm,
+            tool_registry=registry,
+            limits=LoopLimits(),
+            retry=RetryConfig(),
+            emit_reasoning_events=True,
+        )
+
+        events = []
+        async for event in loop.run("测试任务"):
+            events.append(event)
+
+        # 应该有 REASONING 事件
+        reasoning_events = [e for e in events if e.type == EventType.REASONING]
+        assert len(reasoning_events) == 1
+        assert reasoning_events[0].data["content"] == "这是推理过程..."
+
+    async def test_reasoning_event_not_emitted_when_disabled(self):
+        """当 emit_reasoning_events=False 时不应该产出 REASONING 事件"""
+        mock_llm = MockLLM([
+            LLMResponse(
+                content="最终回答",
+                tool_calls=[],
+                usage=TokenUsage(prompt_tokens=10, completion_tokens=20, total_tokens=30),
+                raw={},
+                reasoning_content="这是推理过程...",
+            )
+        ])
+
+        registry = ToolRegistry()
+        loop = ReactLoop(
+            llm=mock_llm,
+            tool_registry=registry,
+            limits=LoopLimits(),
+            retry=RetryConfig(),
+            emit_reasoning_events=False,  # 禁用
+        )
+
+        events = []
+        async for event in loop.run("测试任务"):
+            events.append(event)
+
+        # 不应该有 REASONING 事件
+        reasoning_events = [e for e in events if e.type == EventType.REASONING]
+        assert len(reasoning_events) == 0
+
+    async def test_reasoning_event_not_emitted_when_no_content(self):
+        """当没有 reasoning_content 时不应该产出 REASONING 事件"""
+        mock_llm = MockLLM([
+            LLMResponse(
+                content="最终回答",
+                tool_calls=[],
+                usage=TokenUsage(prompt_tokens=10, completion_tokens=20, total_tokens=30),
+                raw={},
+                reasoning_content=None,  # 无推理内容
+            )
+        ])
+
+        registry = ToolRegistry()
+        loop = ReactLoop(
+            llm=mock_llm,
+            tool_registry=registry,
+            limits=LoopLimits(),
+            retry=RetryConfig(),
+            emit_reasoning_events=True,
+        )
+
+        events = []
+        async for event in loop.run("测试任务"):
+            events.append(event)
+
+        # 不应该有 REASONING 事件
+        reasoning_events = [e for e in events if e.type == EventType.REASONING]
+        assert len(reasoning_events) == 0

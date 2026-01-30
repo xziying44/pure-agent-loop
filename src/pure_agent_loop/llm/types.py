@@ -15,18 +15,30 @@ class TokenUsage:
         prompt_tokens: 输入 token 数
         completion_tokens: 输出 token 数
         total_tokens: 总 token 数
+        reasoning_tokens: 思考消耗的 token 数（可选）
+        cached_tokens: 缓存命中的输入 token 数（可选）
     """
 
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
+    reasoning_tokens: int | None = None
+    cached_tokens: int | None = None
 
     def __add__(self, other: "TokenUsage") -> "TokenUsage":
         """累加两个 TokenUsage"""
+        # 处理可选字段的累加（None 视为 0，但结果保留 None 如果两者都是 None）
+        def add_optional(a: int | None, b: int | None) -> int | None:
+            if a is None and b is None:
+                return None
+            return (a or 0) + (b or 0)
+
         return TokenUsage(
             prompt_tokens=self.prompt_tokens + other.prompt_tokens,
             completion_tokens=self.completion_tokens + other.completion_tokens,
             total_tokens=self.total_tokens + other.total_tokens,
+            reasoning_tokens=add_optional(self.reasoning_tokens, other.reasoning_tokens),
+            cached_tokens=add_optional(self.cached_tokens, other.cached_tokens),
         )
 
     @classmethod
@@ -59,12 +71,14 @@ class LLMResponse:
         tool_calls: 工具调用列表
         usage: Token 用量统计
         raw: 原始响应对象（供高级用户访问）
+        reasoning_content: 模型推理过程（可选，用于调试）
     """
 
     content: str | None
     tool_calls: list[ToolCall]
     usage: TokenUsage
     raw: Any
+    reasoning_content: str | None = None
 
     @property
     def has_tool_calls(self) -> bool:

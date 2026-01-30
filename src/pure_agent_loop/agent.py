@@ -6,7 +6,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Iterator
+from typing import Any, AsyncIterator, Iterator, Literal
 
 from .events import Event, EventType
 from .limits import LoopLimits
@@ -20,6 +20,9 @@ from .builtin_tools import TodoStore, create_todo_tool
 from .prompts import build_system_prompt
 
 logger = logging.getLogger(__name__)
+
+# 思考深度类型
+ThinkingLevel = Literal["off", "low", "medium", "high"]
 
 
 @dataclass
@@ -66,6 +69,8 @@ class Agent:
         limits: 终止条件配置
         retry: 重试配置
         temperature: 温度参数
+        thinking_level: 思考深度（off/low/medium/high），默认 off
+        emit_reasoning_events: 是否推送 REASONING 事件，默认 False
         **llm_kwargs: 透传给 LLM 调用的额外参数
     """
 
@@ -81,8 +86,14 @@ class Agent:
         limits: LoopLimits | None = None,
         retry: RetryConfig | None = None,
         temperature: float = 0.7,
+        thinking_level: ThinkingLevel = "off",
+        emit_reasoning_events: bool = False,
         **llm_kwargs: Any,
     ):
+        # 保存思考模式配置
+        self._thinking_level = thinking_level
+        self._emit_reasoning_events = emit_reasoning_events
+
         # 构建 LLM 客户端
         if llm is not None:
             self._llm = llm
@@ -91,6 +102,7 @@ class Agent:
                 model=model,
                 api_key=api_key,
                 base_url=base_url,
+                thinking_level=thinking_level,
             )
 
         # 创建 TodoStore 和内置工具
@@ -121,6 +133,7 @@ class Agent:
             retry=self._retry,
             llm_kwargs=self._llm_kwargs,
             todo_store=self._todo_store,
+            emit_reasoning_events=self._emit_reasoning_events,
         )
 
     async def arun_stream(

@@ -235,3 +235,45 @@ class TestAgentTodoIntegration:
         agent = Agent(llm=mock_llm, tools=[search])
         assert agent._tool_registry.get("search") is not None
         assert agent._tool_registry.get("todo_write") is not None
+
+
+class TestAgentThinkingMode:
+    """Agent 思考模式测试"""
+
+    def test_default_thinking_level_is_off(self):
+        """默认 thinking_level 应该是 off"""
+        agent = Agent(model="gpt-4o-mini", api_key="test-key")
+        assert agent._thinking_level == "off"
+
+    def test_thinking_level_can_be_set(self):
+        """应该能设置 thinking_level"""
+        agent = Agent(
+            model="gpt-4o-mini",
+            api_key="test-key",
+            thinking_level="high",
+        )
+        assert agent._thinking_level == "high"
+
+    def test_default_emit_reasoning_events_is_false(self):
+        """默认 emit_reasoning_events 应该是 False"""
+        agent = Agent(model="gpt-4o-mini", api_key="test-key")
+        assert agent._emit_reasoning_events is False
+
+    def test_emit_reasoning_events_can_be_enabled(self):
+        """应该能启用 emit_reasoning_events"""
+        agent = Agent(
+            model="gpt-4o-mini",
+            api_key="test-key",
+            emit_reasoning_events=True,
+        )
+        assert agent._emit_reasoning_events is True
+
+    def test_thinking_level_passed_to_openai_client(self):
+        """thinking_level 应该传递给 OpenAIClient"""
+        agent = Agent(
+            model="gpt-4o-mini",
+            api_key="test-key",
+            thinking_level="medium",
+        )
+        # 验证内部 LLM 客户端的 thinking_level
+        assert agent._llm.thinking_level == "medium"

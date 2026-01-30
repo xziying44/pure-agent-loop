@@ -40,6 +40,7 @@ class ReactLoop:
         retry: RetryConfig,
         llm_kwargs: dict[str, Any] | None = None,
         todo_store: TodoStore | None = None,
+        emit_reasoning_events: bool = False,
     ):
         self._llm = llm
         self._tools = tool_registry
@@ -47,6 +48,7 @@ class ReactLoop:
         self._retry_handler = RetryHandler(retry)
         self._llm_kwargs = llm_kwargs or {}
         self._todo_store = todo_store
+        self._emit_reasoning_events = emit_reasoning_events
 
     async def _execute_with_timing(
         self, name: str, arguments: dict[str, Any]
@@ -130,6 +132,10 @@ class ReactLoop:
             checker.add_tokens(response.usage.total_tokens)
 
             # ---- 处理响应 ----
+            # 产出 REASONING 事件（如果启用且有内容）
+            if self._emit_reasoning_events and response.reasoning_content:
+                yield Event.reasoning(step=step, content=response.reasoning_content)
+
             if response.has_tool_calls:
                 # Thought（如果有文本内容）
                 if response.content:

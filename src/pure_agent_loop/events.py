@@ -20,6 +20,7 @@ class EventType(Enum):
     ERROR = "error"
     LOOP_END = "loop_end"
     TODO_UPDATE = "todo_update"
+    REASONING = "reasoning"  # 新增：模型内部推理过程
 
 
 @dataclass
@@ -112,3 +113,12 @@ class Event:
             step=step,
             data={"todos": todos},
         )
+
+    @classmethod
+    def reasoning(cls, step: int, content: str) -> "Event":
+        """创建推理过程事件
+
+        用于记录模型的内部推理链，仅在 emit_reasoning_events=True 时产出。
+        与 thought 事件的区别：reasoning 不会进入消息历史。
+        """
+        return cls(type=EventType.REASONING, step=step, data={"content": content})

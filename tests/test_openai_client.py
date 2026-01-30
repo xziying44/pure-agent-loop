@@ -103,3 +103,41 @@ class TestOpenAIClient:
         call_kwargs = client._client.chat.completions.create.call_args
         assert call_kwargs.kwargs.get("temperature") == 0.5
         assert call_kwargs.kwargs.get("max_tokens") == 100
+
+
+class TestOpenAIClientThinkingLevel:
+    """OpenAIClient 思考模式测试"""
+
+    def test_default_thinking_level_is_off(self):
+        """默认 thinking_level 应该是 off"""
+        client = OpenAIClient(model="gpt-4o-mini", api_key="test-key")
+        assert client.thinking_level == "off"
+
+    def test_thinking_level_can_be_set(self):
+        """应该能设置 thinking_level"""
+        client = OpenAIClient(
+            model="gpt-4o-mini",
+            api_key="test-key",
+            thinking_level="medium",
+        )
+        assert client.thinking_level == "medium"
+
+    def test_is_openai_reasoning_model_o1(self):
+        """应该能识别 o1 系列模型"""
+        client = OpenAIClient(model="o1-preview", api_key="test-key")
+        assert client._is_openai_reasoning_model() is True
+
+    def test_is_openai_reasoning_model_o3(self):
+        """应该能识别 o3 系列模型"""
+        client = OpenAIClient(model="o3-mini", api_key="test-key")
+        assert client._is_openai_reasoning_model() is True
+
+    def test_is_openai_reasoning_model_gpt(self):
+        """GPT 模型不应该被识别为推理模型"""
+        client = OpenAIClient(model="gpt-4o-mini", api_key="test-key")
+        assert client._is_openai_reasoning_model() is False
+
+    def test_is_openai_reasoning_model_deepseek(self):
+        """DeepSeek 模型不应该被识别为 OpenAI 推理模型"""
+        client = OpenAIClient(model="deepseek-chat", api_key="test-key")
+        assert client._is_openai_reasoning_model() is False

@@ -1,5 +1,7 @@
 """pure-agent-loop: 轻量级 ReAct 模式 Agentic Loop 框架"""
 
+from typing import Literal
+
 __version__ = "0.1.0"
 
 from .agent import Agent, AgentResult
@@ -19,6 +21,9 @@ from .errors import (
 )
 from .builtin_tools import TodoItem, TodoStore
 from .prompts import build_system_prompt
+
+# 思考深度类型别名（供用户类型提示使用）
+ThinkingLevel = Literal["off", "low", "medium", "high"]
 
 __all__ = [
     # 核心入口
@@ -52,4 +57,6 @@ __all__ = [
     "TodoStore",
     # 提示词
     "build_system_prompt",
+    # 类型
+    "ThinkingLevel",
 ]
