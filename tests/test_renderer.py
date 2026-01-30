@@ -96,3 +96,23 @@ class TestRenderer:
         result = renderer.render(event)
         # 默认渲染器应该返回某些内容
         assert isinstance(result, str)
+
+
+class TestRendererTodoUpdate:
+    """TODO_UPDATE 事件渲染测试"""
+
+    def test_render_todo_update(self):
+        """应渲染 TODO_UPDATE 事件"""
+        renderer = Renderer()
+        event = Event.todo_update(
+            step=1,
+            todos=[
+                {"content": "搜索资料", "status": "completed"},
+                {"content": "分析结果", "status": "in_progress"},
+                {"content": "撰写报告", "status": "pending"},
+            ],
+        )
+        output = renderer.render(event)
+        assert "搜索资料" in output
+        assert "分析结果" in output
+        assert "撰写报告" in output

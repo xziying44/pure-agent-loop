@@ -80,3 +80,25 @@ class TestEvent:
         event = Event.soft_limit(step=10, reason="step_limit", prompt="请调整")
         assert event.type == EventType.SOFT_LIMIT
         assert event.data["reason"] == "step_limit"
+
+    def test_todo_update_event(self):
+        """应该有 todo_update 工厂方法"""
+        event = Event.todo_update(
+            step=2,
+            todos=[
+                {"content": "任务A", "status": "completed"},
+                {"content": "任务B", "status": "in_progress"},
+            ],
+        )
+        assert event.type == EventType.TODO_UPDATE
+        assert event.step == 2
+        assert len(event.data["todos"]) == 2
+        assert event.data["todos"][0]["content"] == "任务A"
+
+
+class TestEventTypeTodoUpdate:
+    """TODO_UPDATE 事件类型测试"""
+
+    def test_todo_update_type_exists(self):
+        """应该存在 TODO_UPDATE 事件类型"""
+        assert EventType.TODO_UPDATE.value == "todo_update"

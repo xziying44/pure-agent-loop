@@ -163,3 +163,75 @@ class TestAgentResult:
         )
         assert result.content == "测试"
         assert result.steps == 3
+
+
+class TestAgentName:
+    """Agent name 参数测试"""
+
+    @pytest.mark.asyncio
+    async def test_default_name(self):
+        """默认名称应为 '智能助理'"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm)
+        # Agent 内部应使用默认名称构建提示词
+        assert agent._name == "智能助理"
+
+    @pytest.mark.asyncio
+    async def test_custom_name(self):
+        """自定义名称应被保存"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm, name="研究助手")
+        assert agent._name == "研究助手"
+
+
+class TestAgentTodoIntegration:
+    """Agent TodoWrite 集成测试"""
+
+    @pytest.mark.asyncio
+    async def test_todo_write_auto_registered(self):
+        """todo_write 工具应被自动注册"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm)
+        # 工具注册表应包含 todo_write
+        assert agent._tool_registry.get("todo_write") is not None
+
+    @pytest.mark.asyncio
+    async def test_agent_result_has_todos(self):
+        """AgentResult 应包含 todos 属性"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm)
+        result = await agent.arun("打个招呼")
+        assert hasattr(result, "todos")
+        assert isinstance(result.todos, list)
+
+    @pytest.mark.asyncio
+    async def test_todo_write_updates_result(self):
+        """通过 todo_write 工具更新的任务应出现在 AgentResult.todos"""
+        mock_llm = MockLLM([
+            _tool_call_response("todo_write", {
+                "todos": [
+                    {"content": "步骤1", "status": "completed"},
+                    {"content": "步骤2", "status": "in_progress"},
+                ]
+            }),
+            _text_response("任务已规划"),
+        ])
+        agent = Agent(llm=mock_llm)
+        result = await agent.arun("规划任务")
+        assert len(result.todos) == 2
+        assert result.todos[0]["content"] == "步骤1"
+        assert result.todos[1]["status"] == "in_progress"
+
+    @pytest.mark.asyncio
+    async def test_user_tools_preserved(self):
+        """用户注册的工具不应被内置工具覆盖"""
+
+        @tool
+        def search(query: str) -> str:
+            """搜索"""
+            return "结果"
+
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm, tools=[search])
+        assert agent._tool_registry.get("search") is not None
+        assert agent._tool_registry.get("todo_write") is not None

@@ -195,3 +195,74 @@ class TestReactLoop:
         end_event = next(e for e in events if e.type == EventType.LOOP_END)
         messages = end_event.data.get("messages", [])
         assert len(messages) >= 2  # 至少有 system + user + assistant
+
+    @pytest.mark.asyncio
+    async def test_todo_write_emits_todo_update_event(self):
+        """执行 todo_write 工具应额外产出 TODO_UPDATE 事件"""
+        from pure_agent_loop.builtin_tools import TodoStore, create_todo_tool
+
+        store = TodoStore()
+        todo_tool = create_todo_tool(store)
+
+        registry = ToolRegistry()
+        registry.register(todo_tool)
+
+        llm = MockLLM([
+            _tool_call_response("todo_write", {
+                "todos": [
+                    {"content": "搜索资料", "status": "in_progress"},
+                    {"content": "分析结果", "status": "pending"},
+                ]
+            }),
+            _text_response("已规划任务"),
+        ])
+
+        loop = ReactLoop(
+            llm=llm,
+            tool_registry=registry,
+            limits=LoopLimits(),
+            retry=RetryConfig(),
+            todo_store=store,
+        )
+
+        events = []
+        async for event in loop.run("测试任务"):
+            events.append(event)
+
+        types = [e.type for e in events]
+        assert EventType.TODO_UPDATE in types
+
+        todo_event = next(e for e in events if e.type == EventType.TODO_UPDATE)
+        assert len(todo_event.data["todos"]) == 2
+        assert todo_event.data["todos"][0]["content"] == "搜索资料"
+
+    @pytest.mark.asyncio
+    async def test_no_todo_update_without_store(self):
+        """未传入 todo_store 时不应产出 TODO_UPDATE 事件"""
+
+        @tool
+        def dummy(x: str) -> str:
+            """空操作"""
+            return "ok"
+
+        registry = ToolRegistry()
+        registry.register(dummy)
+
+        llm = MockLLM([
+            _tool_call_response("dummy", {"x": "test"}),
+            _text_response("完成"),
+        ])
+
+        loop = ReactLoop(
+            llm=llm,
+            tool_registry=registry,
+            limits=LoopLimits(),
+            retry=RetryConfig(),
+        )
+
+        events = []
+        async for event in loop.run("测试"):
+            events.append(event)
+
+        types = [e.type for e in events]
+        assert EventType.TODO_UPDATE not in types

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from pure_agent_loop import Agent, tool, Renderer
+from pure_agent_loop import Agent, tool, Renderer, EventType
 
 # 加载 examples/.env 配置
 load_dotenv(Path(__file__).parent / ".env")
@@ -30,25 +30,23 @@ def search(query: str) -> str:
 
 async def main():
     agent = Agent(
+        name="搜索助手",
         model=os.getenv("MODEL", "deepseek-chat"),
         api_key=os.environ["API_KEY"],
         base_url=os.getenv("BASE_URL", "https://api.deepseek.com/v1"),
         tools=[search],
+        system_prompt="你擅长搜索网络信息。",
     )
 
     renderer = Renderer()
 
-    # 异步流式执行
+    # 异步流式执行，包含任务进度实时输出
     async for event in agent.arun_stream("搜索 Python 最新版本信息"):
         output = renderer.render(event)
         if output:
             print(output)
 
     print("\n--- 同步方式 ---\n")
-
-    # 同步流式执行
-    for event in agent.run_stream("搜索 Python 最新版本信息"):
-        print(event.to_dict())
 
 
 if __name__ == "__main__":

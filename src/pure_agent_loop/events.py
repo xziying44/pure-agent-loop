@@ -19,6 +19,7 @@ class EventType(Enum):
     SOFT_LIMIT = "soft_limit"
     ERROR = "error"
     LOOP_END = "loop_end"
+    TODO_UPDATE = "todo_update"
 
 
 @dataclass
@@ -101,4 +102,13 @@ class Event:
             type=EventType.SOFT_LIMIT,
             step=step,
             data={"reason": reason, "prompt": prompt},
+        )
+
+    @classmethod
+    def todo_update(cls, step: int, todos: list[dict]) -> "Event":
+        """创建任务列表变更事件"""
+        return cls(
+            type=EventType.TODO_UPDATE,
+            step=step,
+            data={"todos": todos},
         )

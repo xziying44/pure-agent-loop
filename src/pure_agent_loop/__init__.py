@@ -17,6 +17,8 @@ from .errors import (
     LLMError,
     LimitExceededError,
 )
+from .builtin_tools import TodoItem, TodoStore
+from .prompts import build_system_prompt
 
 __all__ = [
     # 核心入口
@@ -45,4 +47,9 @@ __all__ = [
     "ToolExecutionError",
     "LLMError",
     "LimitExceededError",
+    # 内置工具
+    "TodoItem",
+    "TodoStore",
+    # 提示词
+    "build_system_prompt",
 ]

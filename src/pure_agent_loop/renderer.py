@@ -104,5 +104,17 @@ class Renderer:
             case EventType.LOOP_END:
                 reason = event.data.get("stop_reason", "")
                 return f"✅ 任务结束 (原因: {reason})"
+            case EventType.TODO_UPDATE:
+                todos = event.data.get("todos", [])
+                if not todos:
+                    return "📋 任务列表为空"
+                icons = {"pending": "⬜", "in_progress": "🔄", "completed": "✅"}
+                lines = ["📋 任务进度更新："]
+                for i, t in enumerate(todos, 1):
+                    icon = icons.get(t.get("status", ""), "❓")
+                    lines.append(f"  {i}. {icon} {t.get('content', '')}")
+                completed = sum(1 for t in todos if t.get("status") == "completed")
+                lines.append(f"[{completed}/{len(todos)} 完成]")
+                return "\n".join(lines)
             case _:
                 return f"[{event.type.value}] {event.data}"

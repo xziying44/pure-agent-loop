@@ -43,17 +43,24 @@ def calculate(expression: str) -> str:
 
 def main():
     agent = Agent(
+        name="研究助手",
         model=os.getenv("MODEL", "deepseek-chat"),
         api_key=os.environ["API_KEY"],
         base_url=os.getenv("BASE_URL", "https://api.deepseek.com/v1"),
         tools=[search, calculate],
-        system_prompt="你是一个有用的助手，可以搜索信息和计算数学表达式。",
+        system_prompt="你擅长搜索信息和计算数学表达式。",
     )
 
     result = agent.run("Python 语言是什么时候发布的？1991 年到 2026 年一共多少年？")
     print(f"回答: {result.content}")
     print(f"步数: {result.steps}")
     print(f"终止原因: {result.stop_reason}")
+
+    # 展示任务追踪结果
+    if result.todos:
+        print("\n📋 任务追踪：")
+        for todo in result.todos:
+            print(f"  [{todo['status']}] {todo['content']}")
 
 
 if __name__ == "__main__":

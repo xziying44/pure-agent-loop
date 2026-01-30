@@ -16,6 +16,8 @@ from .llm.types import TokenUsage
 from .loop import ReactLoop
 from .retry import RetryConfig
 from .tool import Tool, ToolRegistry
+from .builtin_tools import TodoStore, create_todo_tool
+from .prompts import build_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,7 @@ class AgentResult:
         events: 完整事件历史
         stop_reason: 终止原因 ("completed" | "token_limit" | "error")
         messages: 完整消息历史（可用于续接对话）
+        todos: 最终任务列表
     """
 
     content: str
@@ -39,6 +42,7 @@ class AgentResult:
     events: list[Event]
     stop_reason: str
     messages: list[dict[str, Any]]
+    todos: list[dict[str, str]] = field(default_factory=list)
 
 
 class Agent:
@@ -72,7 +76,8 @@ class Agent:
         base_url: str | None = None,
         llm: BaseLLMClient | None = None,
         tools: list[Tool | dict[str, Any]] | None = None,
-        system_prompt: str = "You are a helpful assistant.",
+        system_prompt: str = "",
+        name: str = "智能助理",
         limits: LoopLimits | None = None,
         retry: RetryConfig | None = None,
         temperature: float = 0.7,
@@ -88,13 +93,21 @@ class Agent:
                 base_url=base_url,
             )
 
-        # 注册工具
+        # 创建 TodoStore 和内置工具
+        self._todo_store = TodoStore()
+        self._name = name
+
+        # 注册工具（内置 + 用户）
         self._tool_registry = ToolRegistry()
+        self._tool_registry.register(create_todo_tool(self._todo_store))
         if tools:
             self._tool_registry.register_many(tools)
 
-        # 配置
-        self._system_prompt = system_prompt
+        # 构建完整系统提示词
+        self._system_prompt = build_system_prompt(
+            name=name,
+            user_prompt=system_prompt,
+        )
         self._limits = limits or LoopLimits()
         self._retry = retry or RetryConfig()
         self._llm_kwargs: dict[str, Any] = {"temperature": temperature, **llm_kwargs}
@@ -107,6 +120,7 @@ class Agent:
             limits=self._limits,
             retry=self._retry,
             llm_kwargs=self._llm_kwargs,
+            todo_store=self._todo_store,
         )
 
     async def arun_stream(
@@ -237,6 +251,9 @@ class Agent:
         # 从事件推断总步数
         steps = max_step
 
+        # 提取最终 todo 状态
+        todos = [t.to_dict() for t in self._todo_store.todos]
+
         return AgentResult(
             content=content,
             steps=steps,
@@ -244,4 +261,5 @@ class Agent:
             events=events,
             stop_reason=stop_reason,
             messages=messages_history,
+            todos=todos,
         )

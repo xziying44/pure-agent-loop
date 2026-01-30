@@ -14,6 +14,7 @@ from .llm.base import BaseLLMClient
 from .llm.types import LLMResponse
 from .retry import RetryConfig, RetryHandler
 from .tool import ToolRegistry
+from .builtin_tools import TodoStore
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +38,14 @@ class ReactLoop:
         limits: LoopLimits,
         retry: RetryConfig,
         llm_kwargs: dict[str, Any] | None = None,
+        todo_store: TodoStore | None = None,
     ):
         self._llm = llm
         self._tools = tool_registry
         self._limits = limits
         self._retry_handler = RetryHandler(retry)
         self._llm_kwargs = llm_kwargs or {}
+        self._todo_store = todo_store
 
     async def run(
         self,
@@ -142,6 +145,13 @@ class ReactLoop:
                     yield Event.observation(
                         step=step, tool=tc.name, result=result, duration=duration
                     )
+
+                    # 如果是 todo_write 工具，额外产出 TODO_UPDATE 事件
+                    if tc.name == "todo_write" and self._todo_store is not None:
+                        yield Event.todo_update(
+                            step=step,
+                            todos=[t.to_dict() for t in self._todo_store.todos],
+                        )
 
                     # 将工具结果追加到消息历史
                     msg_history.append(
