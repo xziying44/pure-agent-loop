@@ -62,13 +62,11 @@ def build_system_prompt(
 
 ### 何时使用 todo_write：
 - **收到任务后立即使用**：将任务拆解为具体的子步骤
-- **开始某个子任务前**：将其状态标记为 in_progress
 - **完成某个子任务后立即**：将其状态标记为 completed
 - **发现新的子任务时**：追加到列表中
 
 ### todo_write 使用规范：
-- 每个 todo 项必须包含 content（任务内容）和 status（pending/in_progress/completed）
-- 同一时刻只能有一个 todo 处于 in_progress 状态
+- 每个 todo 项必须包含 content（任务内容）和 status（pending/completed）
 - 完成后必须立即标记，不要批量标记
 - 复杂任务必须拆解为 3 个以上的子步骤
 

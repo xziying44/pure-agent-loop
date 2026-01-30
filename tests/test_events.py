@@ -87,7 +87,7 @@ class TestEvent:
             step=2,
             todos=[
                 {"content": "任务A", "status": "completed"},
-                {"content": "任务B", "status": "in_progress"},
+                {"content": "任务B", "status": "pending"},
             ],
         )
         assert event.type == EventType.TODO_UPDATE

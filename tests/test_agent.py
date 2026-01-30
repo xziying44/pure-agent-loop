@@ -211,7 +211,7 @@ class TestAgentTodoIntegration:
             _tool_call_response("todo_write", {
                 "todos": [
                     {"content": "步骤1", "status": "completed"},
-                    {"content": "步骤2", "status": "in_progress"},
+                    {"content": "步骤2", "status": "pending"},
                 ]
             }),
             _text_response("任务已规划"),
@@ -220,7 +220,7 @@ class TestAgentTodoIntegration:
         result = await agent.arun("规划任务")
         assert len(result.todos) == 2
         assert result.todos[0]["content"] == "步骤1"
-        assert result.todos[1]["status"] == "in_progress"
+        assert result.todos[1]["status"] == "pending"
 
     @pytest.mark.asyncio
     async def test_user_tools_preserved(self):

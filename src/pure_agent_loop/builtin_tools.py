@@ -8,6 +8,9 @@ from typing import Any
 
 from .tool import Tool
 
+# 合法的任务状态值
+VALID_STATUSES = ("pending", "completed")
+
 
 @dataclass
 class TodoItem:
@@ -15,11 +18,19 @@ class TodoItem:
 
     Attributes:
         content: 任务内容描述
-        status: 任务状态 (pending/in_progress/completed)
+        status: 任务状态 (pending/completed)
     """
 
     content: str
     status: str = "pending"
+
+    def __post_init__(self):
+        """校验状态值合法性"""
+        if self.status not in VALID_STATUSES:
+            raise ValueError(
+                f"无效的任务状态: '{self.status}'，"
+                f"仅支持: {', '.join(VALID_STATUSES)}"
+            )
 
     def to_dict(self) -> dict[str, str]:
         """转换为字典"""
@@ -44,7 +55,10 @@ class TodoStore:
         Returns:
             格式化的当前 todo 列表字符串（注入 LLM 上下文）
         """
-        self._todos = [TodoItem(**t) for t in todos]
+        try:
+            self._todos = [TodoItem(**t) for t in todos]
+        except ValueError as e:
+            return f"❌ 任务更新失败: {e}"
         return self._format_output()
 
     @property
@@ -59,7 +73,6 @@ class TodoStore:
 
         status_icons = {
             "pending": "⬜",
-            "in_progress": "🔄",
             "completed": "✅",
         }
 
@@ -69,11 +82,10 @@ class TodoStore:
             lines.append(f"  {i}. {icon} [{todo.status}] {todo.content}")
 
         pending = sum(1 for t in self._todos if t.status == "pending")
-        in_progress = sum(1 for t in self._todos if t.status == "in_progress")
         completed = sum(1 for t in self._todos if t.status == "completed")
         lines.append(
             f"\n总计: {len(self._todos)} 项 | "
-            f"待处理: {pending} | 进行中: {in_progress} | 已完成: {completed}"
+            f"待处理: {pending} | 已完成: {completed}"
         )
         return "\n".join(lines)
 
@@ -92,13 +104,13 @@ def create_todo_tool(store: TodoStore) -> Tool:
         """更新任务列表，完全替换当前列表
 
         Args:
-            todos: 任务列表，每项包含 content（任务内容）和 status（pending/in_progress/completed）
+            todos: 任务列表，每项包含 content（任务内容）和 status（pending/completed）
         """
         return store.write(todos)
 
     return Tool(
         name="todo_write",
-        description="更新任务列表，完全替换当前列表。每个任务项包含 content（任务内容）和 status（pending/in_progress/completed）。",
+        description="更新任务列表，完全替换当前列表。每个任务项包含 content（任务内容）和 status（pending/completed）。",
         parameters={
             "type": "object",
             "properties": {
@@ -114,7 +126,7 @@ def create_todo_tool(store: TodoStore) -> Tool:
                             },
                             "status": {
                                 "type": "string",
-                                "enum": ["pending", "in_progress", "completed"],
+                                "enum": ["pending", "completed"],
                                 "description": "任务状态",
                             },
                         },

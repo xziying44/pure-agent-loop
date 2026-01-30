@@ -227,7 +227,7 @@ class TestReactLoop:
         llm = MockLLM([
             _tool_call_response("todo_write", {
                 "todos": [
-                    {"content": "搜索资料", "status": "in_progress"},
+                    {"content": "搜索资料", "status": "completed"},
                     {"content": "分析结果", "status": "pending"},
                 ]
             }),

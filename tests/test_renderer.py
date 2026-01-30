@@ -108,7 +108,7 @@ class TestRendererTodoUpdate:
             step=1,
             todos=[
                 {"content": "搜索资料", "status": "completed"},
-                {"content": "分析结果", "status": "in_progress"},
+                {"content": "分析结果", "status": "pending"},
                 {"content": "撰写报告", "status": "pending"},
             ],
         )
