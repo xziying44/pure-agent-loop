@@ -1,6 +1,20 @@
-"""基础示例: 最简 Agent 使用"""
+"""基础示例: 最简 Agent 使用
+
+使用前请先安装依赖并配置环境变量:
+    pip install python-dotenv
+    cp .env.example .env
+    # 编辑 .env 填入实际的 API 密钥
+"""
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from pure_agent_loop import Agent, tool
+
+# 加载 examples/.env 配置
+load_dotenv(Path(__file__).parent / ".env")
 
 
 @tool
@@ -29,9 +43,9 @@ def calculate(expression: str) -> str:
 
 def main():
     agent = Agent(
-        model="deepseek-chat",
-        api_key="your-api-key",
-        base_url="https://api.deepseek.com/v1",
+        model=os.getenv("MODEL", "deepseek-chat"),
+        api_key=os.environ["API_KEY"],
+        base_url=os.getenv("BASE_URL", "https://api.deepseek.com/v1"),
         tools=[search, calculate],
         system_prompt="你是一个有用的助手，可以搜索信息和计算数学表达式。",
     )

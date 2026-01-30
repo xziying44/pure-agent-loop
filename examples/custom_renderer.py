@@ -1,6 +1,20 @@
-"""自定义渲染器示例: 定制事件展示格式"""
+"""自定义渲染器示例: 定制事件展示格式
+
+使用前请先安装依赖并配置环境变量:
+    pip install python-dotenv
+    cp .env.example .env
+    # 编辑 .env 填入实际的 API 密钥
+"""
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from pure_agent_loop import Agent, tool, Renderer, Event, EventType
+
+# 加载 examples/.env 配置
+load_dotenv(Path(__file__).parent / ".env")
 
 
 @tool
@@ -51,9 +65,9 @@ def render_limit(event: Event) -> str:
 
 def main():
     agent = Agent(
-        model="deepseek-chat",
-        api_key="your-api-key",
-        base_url="https://api.deepseek.com/v1",
+        model=os.getenv("MODEL", "deepseek-chat"),
+        api_key=os.environ["API_KEY"],
+        base_url=os.getenv("BASE_URL", "https://api.deepseek.com/v1"),
         tools=[search, save_file],
     )
 

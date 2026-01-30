@@ -44,6 +44,9 @@ htmlcov/
 *.tar.gz
 *.whl
 
+# Environment
+examples/.env
+
 # Misc
 .DS_Store
 Thumbs.db
