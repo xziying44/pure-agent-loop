@@ -1,7 +1,7 @@
 """Exa 搜索示例: 使用 Exa AI 进行网页搜索（流式事件输出）
 
 使用前请先安装依赖并配置环境变量:
-    pip install python-dotenv requests
+    pip install python-dotenv requests rich
     cp .env.example .env
     # 编辑 .env 填入 API_KEY 和 EXA_API_KEY
 """
@@ -13,7 +13,8 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-from pure_agent_loop import Agent, tool, Renderer, EventType
+from pure_agent_loop import Agent, tool
+from rich_renderer import RichRenderer
 
 # 加载 examples/.env 配置
 load_dotenv(Path(__file__).parent / ".env")
@@ -114,20 +115,22 @@ async def main():
     )
 
     # 测试查询
-    query = "搜索网络看看python目前最新版本是什么，有什么新特性？"
+    query = "我想了解智能体的skill是啥原理，这个东西最近为啥这么火"
     print(f"\n🔍 查询: {query}\n")
     print("=" * 60)
 
-    # 创建渲染器
-    renderer = Renderer()
+    # 使用 RichRenderer 美化输出
+    renderer = RichRenderer(
+        max_thought_lines=3,      # 思考内容最多显示3行
+        max_result_chars=150,     # 工具结果最多显示150字符
+        show_todo_table=True,     # 用表格显示 Todo 列表
+    )
 
     # 流式执行，实时输出事件
     async for event in agent.arun_stream(query):
-        output = renderer.render(event)
-        if output:
-            print(output)
+        renderer.render(event)
 
-    print("=" * 60)
+    print("\n" + "=" * 60)
     print("✅ 执行完成")
 
 
