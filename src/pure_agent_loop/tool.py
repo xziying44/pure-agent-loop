@@ -6,6 +6,7 @@
 import asyncio
 import inspect
 import re
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, get_type_hints
 
@@ -141,25 +142,28 @@ class Tool:
             )
 
 
-def tool(fn: Callable) -> Tool:
-    """工具装饰器
+def _build_tool(fn: Callable, *, name: str | None = None) -> Tool:
+    """从函数构建 Tool 对象（内部辅助函数）
 
-    将普通函数转换为 Tool 对象，自动提取参数 schema 和描述。
+    将函数的类型注解和 docstring 自动转换为 Tool 对象。
+    支持普通函数和绑定方法。
 
     Args:
-        fn: 要装饰的函数（同步或异步）
+        fn: 要转换的函数（同步或异步，支持绑定方法）
+        name: 自定义工具名称，默认使用函数名
 
     Returns:
         Tool 对象
     """
-    name = fn.__name__
+    tool_name = name or fn.__name__
     is_async = asyncio.iscoroutinefunction(fn)
 
     # 解析 docstring
     description, param_descriptions = _parse_google_docstring(fn.__doc__ or "")
 
-    # 获取类型注解
-    hints = get_type_hints(fn)
+    # 获取类型注解（绑定方法需从 __func__ 获取）
+    func = getattr(fn, "__func__", fn)
+    hints = get_type_hints(func)
     sig = inspect.signature(fn)
 
     # 构建 JSON Schema
@@ -192,12 +196,61 @@ def tool(fn: Callable) -> Tool:
     }
 
     return Tool(
-        name=name,
+        name=tool_name,
         description=description,
         parameters=parameters,
         function=fn,
         is_async=is_async,
     )
+
+
+def tool(fn: Callable) -> Tool | Callable:
+    """工具装饰器
+
+    双模式行为：
+    - 独立函数（无 self/cls）：转换为 Tool 对象
+    - 类方法（有 self/cls）：仅标记 _tool_marker = True，返回原始函数
+
+    Args:
+        fn: 要装饰的函数（同步或异步）
+
+    Returns:
+        Tool 对象（独立函数）或标记后的原始函数（类方法）
+    """
+    sig = inspect.signature(fn)
+    params = list(sig.parameters.keys())
+
+    # 类方法模式：首个参数为 self/cls，仅标记不转换
+    if params and params[0] in ("self", "cls"):
+        fn._tool_marker = True  # type: ignore[attr-defined]
+        return fn
+
+    # 独立函数模式：转换为 Tool 对象
+    return _build_tool(fn)
+
+
+def _has_tool_methods(cls: type) -> bool:
+    """检查类中是否包含 @tool 标记的方法
+
+    Args:
+        cls: 要检查的类
+
+    Returns:
+        是否包含工具方法
+    """
+    for name, value in cls.__dict__.items():
+        if name.startswith("_"):
+            continue
+        # 普通方法或异步方法 + @tool 标记
+        if callable(value) and getattr(value, "_tool_marker", False):
+            return True
+        # @staticmethod + @tool（内层 @tool 转换为 Tool 对象）
+        if isinstance(value, staticmethod) and isinstance(value.__func__, Tool):
+            return True
+        # @classmethod + @tool（内层 @tool 标记了函数）
+        if isinstance(value, classmethod) and getattr(value.__func__, "_tool_marker", False):
+            return True
+    return False
 
 
 class ToolRegistry:
@@ -209,33 +262,108 @@ class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, Tool] = {}
 
-    def register(self, tool_or_dict: Tool | dict[str, Any]) -> None:
+    def register(self, item: Any) -> None:
         """注册单个工具
 
-        支持 Tool 对象或字典格式。
+        支持 Tool 对象、字典格式、类或包含 @tool 方法的类实例。
 
         Args:
-            tool_or_dict: Tool 对象或字典格式工具定义
+            item: Tool 对象、字典格式工具定义、类或类实例
         """
-        if isinstance(tool_or_dict, Tool):
-            self._tools[tool_or_dict.name] = tool_or_dict
-        elif isinstance(tool_or_dict, dict):
+        if isinstance(item, Tool):
+            self._tools[item.name] = item
+        elif isinstance(item, dict):
             # 从字典格式创建 Tool
             t = Tool(
-                name=tool_or_dict["name"],
-                description=tool_or_dict.get("description", ""),
-                parameters=tool_or_dict.get("parameters", {"type": "object", "properties": {}}),
-                function=tool_or_dict["function"],
-                is_async=asyncio.iscoroutinefunction(tool_or_dict["function"]),
+                name=item["name"],
+                description=item.get("description", ""),
+                parameters=item.get("parameters", {"type": "object", "properties": {}}),
+                function=item["function"],
+                is_async=asyncio.iscoroutinefunction(item["function"]),
             )
             self._tools[t.name] = t
+        elif isinstance(item, type):
+            # 传入类本身
+            self.register_class(item)
+        elif not isinstance(item, (str, int, float, bool, list, tuple, set)) and _has_tool_methods(type(item)):
+            # 传入包含 @tool 方法的类实例
+            self.register_class(item)
         else:
-            raise TypeError(f"不支持的工具类型: {type(tool_or_dict)}")
+            raise TypeError(f"不支持的工具类型: {type(item)}")
 
-    def register_many(self, tools: list[Tool | dict[str, Any]]) -> None:
+    def register_many(self, tools: list[Any]) -> None:
         """批量注册工具"""
         for t in tools:
             self.register(t)
+
+    def register_class(self, obj: Any) -> None:
+        """注册类中所有 @tool 标记的方法
+
+        支持传入类本身（自动无参实例化）或类实例。
+        工具名称格式：{tool_prefix 或类名}_{方法名}
+
+        Args:
+            obj: 类或类实例
+        """
+        # 解析类和实例
+        if isinstance(obj, type):
+            cls = obj
+            try:
+                instance = cls()
+            except TypeError as e:
+                raise TypeError(
+                    f"无法自动实例化类 '{cls.__name__}'：构造函数需要参数。"
+                    f"请传入类的实例而非类本身。"
+                ) from e
+        else:
+            instance = obj
+            cls = type(obj)
+
+        # 获取工具名称前缀
+        prefix = getattr(cls, "tool_prefix", cls.__name__)
+
+        # 扫描并注册标记的方法
+        found = False
+        for attr_name, raw_value in cls.__dict__.items():
+            if attr_name.startswith("_"):
+                continue
+
+            tool_name = f"{prefix}_{attr_name}"
+
+            # 情况1：普通方法 + @tool 标记
+            if callable(raw_value) and getattr(raw_value, "_tool_marker", False):
+                found = True
+                bound_method = getattr(instance, attr_name)
+                self._tools[tool_name] = _build_tool(bound_method, name=tool_name)
+                continue
+
+            # 情况2：@staticmethod + @tool（@tool 返回了 Tool 对象）
+            if isinstance(raw_value, staticmethod) and isinstance(
+                raw_value.__func__, Tool
+            ):
+                found = True
+                original_tool = raw_value.__func__
+                # 复用已有 Tool 的 schema，仅重命名
+                self._tools[tool_name] = Tool(
+                    name=tool_name,
+                    description=original_tool.description,
+                    parameters=original_tool.parameters,
+                    function=original_tool.function,
+                    is_async=original_tool.is_async,
+                )
+                continue
+
+            # 情况3：@classmethod + @tool 标记
+            if isinstance(raw_value, classmethod) and getattr(
+                raw_value.__func__, "_tool_marker", False
+            ):
+                found = True
+                bound_method = getattr(instance, attr_name)
+                self._tools[tool_name] = _build_tool(bound_method, name=tool_name)
+                continue
+
+        if not found:
+            warnings.warn(f"类 '{cls.__name__}' 中未发现任何 @tool 标记的方法")
 
     def get(self, name: str) -> Tool | None:
         """按名称获取工具"""
