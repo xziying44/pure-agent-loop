@@ -52,3 +52,4 @@ examples/.env
 Thumbs.db
 *.log
 /.mcp.json
+*.skill
