@@ -38,3 +38,18 @@ class TestErrors:
         assert error.limit_type == "token_limit"
         assert error.limit_value == 100000
         assert error.current_value == 150000
+
+
+class TestSandboxViolationError:
+    """沙箱违规异常测试"""
+
+    def test_inherits_base(self):
+        from pure_agent_loop.errors import SandboxViolationError, PureAgentLoopError
+        err = SandboxViolationError("/etc/passwd", "read", ["/workspace"])
+        assert isinstance(err, PureAgentLoopError)
+
+    def test_message_contains_path(self):
+        from pure_agent_loop.errors import SandboxViolationError
+        err = SandboxViolationError("/etc/passwd", "read", ["/workspace"])
+        assert "/etc/passwd" in str(err)
+        assert "read" in str(err)

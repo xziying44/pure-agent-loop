@@ -48,3 +48,19 @@ class LimitExceededError(PureAgentLoopError):
         super().__init__(
             f"超出 {limit_type} 限制: 当前 {current_value}, 上限 {limit_value}"
         )
+
+
+class SandboxViolationError(PureAgentLoopError):
+    """沙箱权限违规异常
+
+    当文件操作的目标路径不在沙箱允许范围内时抛出。
+    """
+
+    def __init__(self, path: str, operation: str, allowed_paths: list[str]):
+        self.path = path
+        self.operation = operation
+        self.allowed_paths = allowed_paths
+        super().__init__(
+            f"沙箱权限不足: 无法对 '{path}' 执行 {operation} 操作。"
+            f"允许的路径: {allowed_paths}"
+        )
