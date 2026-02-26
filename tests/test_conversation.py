@@ -213,3 +213,12 @@ class TestConversationSync:
         assert r1.content == "第一轮"
         assert r2.content == "第二轮"
         assert len(r2.messages) > len(r1.messages)
+
+
+class TestConversationImport:
+    """导入路径测试"""
+
+    def test_import_from_package(self):
+        """应能从包顶层导入 Conversation"""
+        from pure_agent_loop import Conversation
+        assert Conversation is not None

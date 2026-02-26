@@ -5,6 +5,7 @@ from typing import Literal
 __version__ = "0.1.0"
 
 from .agent import Agent, AgentResult
+from .conversation import Conversation
 from .tool import tool, Tool, ToolRegistry
 from .events import Event, EventType
 from .renderer import Renderer
@@ -32,6 +33,7 @@ __all__ = [
     # 核心入口
     "Agent",
     "AgentResult",
+    "Conversation",
     # 工具
     "tool",
     "Tool",
