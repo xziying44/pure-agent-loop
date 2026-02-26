@@ -65,3 +65,17 @@ class Conversation:
             if event.type == EventType.LOOP_END:
                 self._messages = event.data.get("messages", [])
             yield event
+
+    async def send(self, task: str) -> AgentResult:
+        """发送消息并返回完整结果
+
+        Args:
+            task: 任务描述
+
+        Returns:
+            AgentResult: 执行结果
+        """
+        events: list[Event] = []
+        async for event in self.send_stream(task):
+            events.append(event)
+        return self._agent._build_result(events)

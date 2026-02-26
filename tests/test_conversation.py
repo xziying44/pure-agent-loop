@@ -129,3 +129,46 @@ class TestConversationSendStream:
 
         conv.reset()
         assert conv.messages == []
+
+
+class TestConversationSend:
+    """send 异步阻塞发送测试"""
+
+    @pytest.mark.asyncio
+    async def test_send_returns_agent_result(self):
+        """send 应返回 AgentResult"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm)
+        conv = agent.conversation()
+
+        result = await conv.send("打个招呼")
+        assert isinstance(result, AgentResult)
+        assert result.content == "你好"
+        assert result.stop_reason == "completed"
+
+    @pytest.mark.asyncio
+    async def test_send_updates_messages(self):
+        """send 完成后应更新内部消息历史"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm)
+        conv = agent.conversation()
+
+        await conv.send("打个招呼")
+        assert len(conv.messages) > 0
+
+    @pytest.mark.asyncio
+    async def test_send_multi_turn(self):
+        """两轮 send 应实现多轮对话续接"""
+        mock_llm = MockLLM([
+            _text_response("第一轮"),
+            _text_response("第二轮"),
+        ])
+        agent = Agent(llm=mock_llm)
+        conv = agent.conversation()
+
+        r1 = await conv.send("问题1")
+        r2 = await conv.send("追问")
+
+        assert r1.content == "第一轮"
+        assert r2.content == "第二轮"
+        assert len(r2.messages) > len(r1.messages)
