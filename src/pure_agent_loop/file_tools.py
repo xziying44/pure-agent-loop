@@ -252,7 +252,45 @@ def create_file_tools(guard: SandboxGuard) -> list[Tool]:
             new_string: 替换后的文本
             replace_all: 是否替换所有匹配项，默认仅替换第一个
         """
-        return "⚠️ file_edit 尚未实现"
+        import difflib
+
+        path = Path(file_path).resolve()
+        guard.check_write(path)
+
+        if not path.exists():
+            return f"⚠️ 文件不存在: '{file_path}'"
+
+        content = path.read_text(encoding="utf-8", errors="replace")
+        count = content.count(old_string)
+
+        if count == 0:
+            return f"⚠️ 未找到匹配内容，请检查 old_string 是否与文件内容完全一致"
+
+        if count > 1 and not replace_all:
+            return (
+                f"⚠️ 找到 {count} 处匹配，请提供更多上下文使匹配唯一，"
+                f"或设置 replace_all=True"
+            )
+
+        if replace_all:
+            new_content = content.replace(old_string, new_string)
+        else:
+            new_content = content.replace(old_string, new_string, 1)
+
+        # 生成 diff
+        diff = difflib.unified_diff(
+            content.splitlines(keepends=True),
+            new_content.splitlines(keepends=True),
+            fromfile=f"a/{path.name}",
+            tofile=f"b/{path.name}",
+        )
+        diff_text = "".join(diff)
+
+        # 写入文件
+        path.write_text(new_content, encoding="utf-8")
+
+        replaced = count if replace_all else 1
+        return f"✅ 已替换 {replaced} 处匹配\n\n{diff_text}"
 
     def file_write(file_path: str, content: str) -> str:
         """创建新文件或完全重写已有文件

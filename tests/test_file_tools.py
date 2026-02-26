@@ -278,3 +278,107 @@ class TestFileGrep:
             "pattern": "match_line_", "path": str(read_dir),
         })
         assert "100" in result or "截断" in result
+
+
+class TestFileEdit:
+    """file_edit 工具测试"""
+
+    async def test_edit_replaces_text(self, tools, sandbox_dirs):
+        """应能精确替换文本"""
+        _, write_dir, _ = sandbox_dirs
+        f = write_dir / "code.py"
+        f.write_text("def hello():\n    pass\n")
+        result = await tools["file_edit"].execute({
+            "file_path": str(f),
+            "old_string": "    pass",
+            "new_string": "    print('hello')",
+        })
+        assert f.read_text() == "def hello():\n    print('hello')\n"
+        assert "diff" in result.lower() or "替换" in result or "---" in result
+
+    async def test_edit_denied_in_read_paths(self, tools, sandbox_dirs):
+        """read_paths 内的文件应拒绝编辑"""
+        read_dir, _, _ = sandbox_dirs
+        f = read_dir / "readonly.py"
+        f.write_text("original")
+        result = await tools["file_edit"].execute({
+            "file_path": str(f),
+            "old_string": "original",
+            "new_string": "modified",
+        })
+        assert "权限" in result or "沙箱" in result
+        assert f.read_text() == "original"  # 文件未被修改
+
+    async def test_edit_denied_outside_sandbox(self, tools, sandbox_dirs):
+        """沙箱外文件应拒绝编辑"""
+        _, _, outside_dir = sandbox_dirs
+        f = outside_dir / "secret.py"
+        f.write_text("secret")
+        result = await tools["file_edit"].execute({
+            "file_path": str(f),
+            "old_string": "secret",
+            "new_string": "hacked",
+        })
+        assert "权限" in result or "沙箱" in result
+
+    async def test_edit_no_match(self, tools, sandbox_dirs):
+        """未找到匹配时应返回错误"""
+        _, write_dir, _ = sandbox_dirs
+        f = write_dir / "code.py"
+        f.write_text("hello world")
+        result = await tools["file_edit"].execute({
+            "file_path": str(f),
+            "old_string": "not_exist",
+            "new_string": "replaced",
+        })
+        assert "未找到" in result
+        assert f.read_text() == "hello world"  # 文件未被修改
+
+    async def test_edit_multiple_matches_error(self, tools, sandbox_dirs):
+        """多处匹配且 replace_all=False 时应报错"""
+        _, write_dir, _ = sandbox_dirs
+        f = write_dir / "dup.py"
+        f.write_text("aaa\nbbb\naaa\n")
+        result = await tools["file_edit"].execute({
+            "file_path": str(f),
+            "old_string": "aaa",
+            "new_string": "ccc",
+        })
+        assert "多处" in result or "匹配" in result
+        assert f.read_text() == "aaa\nbbb\naaa\n"  # 文件未被修改
+
+    async def test_edit_replace_all(self, tools, sandbox_dirs):
+        """replace_all=True 应替换所有匹配"""
+        _, write_dir, _ = sandbox_dirs
+        f = write_dir / "dup.py"
+        f.write_text("aaa\nbbb\naaa\n")
+        result = await tools["file_edit"].execute({
+            "file_path": str(f),
+            "old_string": "aaa",
+            "new_string": "ccc",
+            "replace_all": True,
+        })
+        assert f.read_text() == "ccc\nbbb\nccc\n"
+
+    async def test_edit_nonexistent_file(self, tools, sandbox_dirs):
+        """不存在的文件应返回错误"""
+        _, write_dir, _ = sandbox_dirs
+        result = await tools["file_edit"].execute({
+            "file_path": str(write_dir / "nope.py"),
+            "old_string": "a",
+            "new_string": "b",
+        })
+        assert "不存在" in result
+
+    async def test_edit_returns_diff(self, tools, sandbox_dirs):
+        """应返回 diff 格式的变更摘要"""
+        _, write_dir, _ = sandbox_dirs
+        f = write_dir / "diff_test.py"
+        f.write_text("old_line\n")
+        result = await tools["file_edit"].execute({
+            "file_path": str(f),
+            "old_string": "old_line",
+            "new_string": "new_line",
+        })
+        assert "old_line" in result
+        assert "new_line" in result
