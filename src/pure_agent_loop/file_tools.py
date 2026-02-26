@@ -403,6 +403,99 @@ def create_file_tools(guard: SandboxGuard, cwd: Path | None = None) -> list[Tool
 
         return "\n".join(lines)
 
+    def file_manage(operations: list[dict]) -> str:
+        """文件管理操作管道
+
+        支持串行执行多个文件操作，操作按顺序执行，失败即停止。
+        路径支持相对路径（基于工作目录解析）。
+
+        Args:
+            operations: 操作列表，每个操作是一个字典，包含 action 和对应参数。
+                支持的 action：
+                - mkdir: 创建目录（含父目录）。参数：path
+                - delete: 删除文件或目录。参数：path, recursive（可选，默认 false）
+                - move: 移动文件/目录。参数：source, destination
+                - copy: 复制文件/目录（目录递归复制）。参数：source, destination
+                - rename: 重命名文件/目录。参数：source, destination
+        """
+        import shutil
+
+        total = len(operations)
+        results = []
+
+        for i, op in enumerate(operations, 1):
+            action = op.get("action", "")
+            step_prefix = f"[{i}/{total}]"
+
+            try:
+                if action == "mkdir":
+                    target = _resolve_path(op.get("path"))
+                    guard.check_write(target)
+                    target.mkdir(parents=True, exist_ok=True)
+                    results.append(f"{step_prefix} mkdir {op.get('path')} → 成功")
+
+                elif action == "delete":
+                    target = _resolve_path(op.get("path"))
+                    guard.check_write(target)
+                    if not target.exists():
+                        raise FileNotFoundError(f"路径不存在: {op.get('path')}")
+                    if target.is_dir():
+                        if any(target.iterdir()):
+                            if not op.get("recursive", False):
+                                raise OSError(f"目录非空，需设置 recursive=true: {op.get('path')}")
+                            shutil.rmtree(target)
+                        else:
+                            target.rmdir()
+                    else:
+                        target.unlink()
+                    results.append(f"{step_prefix} delete {op.get('path')} → 成功")
+
+                elif action == "move":
+                    src = _resolve_path(op.get("source"))
+                    dst = _resolve_path(op.get("destination"))
+                    guard.check_read(src)
+                    guard.check_write(dst)
+                    shutil.move(str(src), str(dst))
+                    results.append(
+                        f"{step_prefix} move {op.get('source')} → {op.get('destination')} → 成功"
+                    )
+
+                elif action == "copy":
+                    src = _resolve_path(op.get("source"))
+                    dst = _resolve_path(op.get("destination"))
+                    guard.check_read(src)
+                    guard.check_write(dst)
+                    if src.is_dir():
+                        shutil.copytree(str(src), str(dst))
+                    else:
+                        shutil.copy2(str(src), str(dst))
+                    results.append(
+                        f"{step_prefix} copy {op.get('source')} → {op.get('destination')} → 成功"
+                    )
+
+                elif action == "rename":
+                    src = _resolve_path(op.get("source"))
+                    dst = _resolve_path(op.get("destination"))
+                    guard.check_write(src)
+                    guard.check_write(dst)
+                    src.rename(dst)
+                    results.append(
+                        f"{step_prefix} rename {op.get('source')} → {op.get('destination')} → 成功"
+                    )
+
+                else:
+                    raise ValueError(f"不支持的操作: {action}")
+
+            except Exception as e:
+                results.append(f"{step_prefix} {action} → 失败: {e}")
+                remaining = total - i
+                if remaining > 0:
+                    results.append(f"操作在第 {i} 步中止，后续 {remaining} 个操作未执行。")
+                return "\n".join(results)
+
+        results.append(f"\n全部 {total} 个操作执行成功。")
+        return "\n".join(results)
+
     # 构建 Tool 对象列表
     from .tool import _build_tool
     return [
@@ -412,4 +505,5 @@ def create_file_tools(guard: SandboxGuard, cwd: Path | None = None) -> list[Tool
         _build_tool(file_edit),
         _build_tool(file_write),
         _build_tool(file_tree),
+        _build_tool(file_manage),
     ]

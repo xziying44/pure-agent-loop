@@ -38,10 +38,10 @@ def tools(guard):
 class TestCreateFileTools:
     """create_file_tools 工厂函数测试"""
 
-    def test_returns_six_tools(self, guard):
-        """应返回 6 个工具"""
+    def test_returns_seven_tools(self, guard):
+        """应返回 7 个工具"""
         tools = create_file_tools(guard)
-        assert len(tools) == 6
+        assert len(tools) == 7
         assert all(isinstance(t, Tool) for t in tools)
 
     def test_tool_names(self, guard):
@@ -49,7 +49,7 @@ class TestCreateFileTools:
         names = {t.name for t in create_file_tools(guard)}
         assert names == {
             "file_read", "file_search", "file_grep",
-            "file_edit", "file_write", "file_tree",
+            "file_edit", "file_write", "file_tree", "file_manage",
         }
 
 
@@ -547,3 +547,176 @@ class TestFileTree:
         (cwd / "b.txt").write_text("b")
         result = await tools["file_tree"].execute({"path": str(cwd)})
         assert "├──" in result or "└──" in result
+
+
+class TestFileManage:
+    """file_manage 工具测试"""
+
+    async def test_mkdir_creates_directory(self, cwd_tools):
+        """mkdir 应创建目录（含父目录）"""
+        tools, cwd = cwd_tools
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "mkdir", "path": "a/b/c"}],
+        })
+        assert (cwd / "a" / "b" / "c").is_dir()
+        assert "成功" in result
+
+    async def test_delete_file(self, cwd_tools):
+        """delete 应删除文件"""
+        tools, cwd = cwd_tools
+        f = cwd / "to_delete.txt"
+        f.write_text("bye")
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "delete", "path": "to_delete.txt"}],
+        })
+        assert not f.exists()
+        assert "成功" in result
+
+    async def test_delete_empty_dir(self, cwd_tools):
+        """delete 应能删除空目录"""
+        tools, cwd = cwd_tools
+        d = cwd / "empty_dir"
+        d.mkdir()
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "delete", "path": "empty_dir"}],
+        })
+        assert not d.exists()
+
+    async def test_delete_nonempty_dir_without_recursive_fails(self, cwd_tools):
+        """delete 非空目录且无 recursive 应失败"""
+        tools, cwd = cwd_tools
+        d = cwd / "nonempty"
+        d.mkdir()
+        (d / "file.txt").write_text("content")
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "delete", "path": "nonempty"}],
+        })
+        assert d.exists()  # 目录仍在
+        assert "失败" in result
+
+    async def test_delete_nonempty_dir_with_recursive(self, cwd_tools):
+        """delete 非空目录且 recursive=True 应成功"""
+        tools, cwd = cwd_tools
+        d = cwd / "nonempty"
+        d.mkdir()
+        (d / "file.txt").write_text("content")
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "delete", "path": "nonempty", "recursive": True}],
+        })
+        assert not d.exists()
+        assert "成功" in result
+
+    async def test_move_file(self, cwd_tools):
+        """move 应移动文件"""
+        tools, cwd = cwd_tools
+        src = cwd / "src.txt"
+        src.write_text("hello")
+        (cwd / "dest").mkdir()
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "move", "source": "src.txt", "destination": "dest/src.txt"}],
+        })
+        assert not src.exists()
+        assert (cwd / "dest" / "src.txt").read_text() == "hello"
+
+    async def test_copy_file(self, cwd_tools):
+        """copy 应复制文件"""
+        tools, cwd = cwd_tools
+        src = cwd / "original.txt"
+        src.write_text("data")
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "copy", "source": "original.txt", "destination": "copy.txt"}],
+        })
+        assert src.exists()  # 原文件仍在
+        assert (cwd / "copy.txt").read_text() == "data"
+
+    async def test_copy_directory(self, cwd_tools):
+        """copy 应递归复制目录"""
+        tools, cwd = cwd_tools
+        src = cwd / "srcdir"
+        src.mkdir()
+        (src / "a.txt").write_text("a")
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "copy", "source": "srcdir", "destination": "dstdir"}],
+        })
+        assert (cwd / "dstdir" / "a.txt").read_text() == "a"
+
+    async def test_rename_file(self, cwd_tools):
+        """rename 应重命名文件"""
+        tools, cwd = cwd_tools
+        src = cwd / "old_name.txt"
+        src.write_text("content")
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "rename", "source": "old_name.txt", "destination": "new_name.txt"}],
+        })
+        assert not src.exists()
+        assert (cwd / "new_name.txt").read_text() == "content"
+
+    async def test_serial_operations(self, cwd_tools):
+        """串行操作应按顺序执行"""
+        tools, cwd = cwd_tools
+        result = await tools["file_manage"].execute({
+            "operations": [
+                {"action": "mkdir", "path": "project/src"},
+                {"action": "mkdir", "path": "project/tests"},
+            ],
+        })
+        assert (cwd / "project" / "src").is_dir()
+        assert (cwd / "project" / "tests").is_dir()
+        assert "全部" in result and "成功" in result
+
+    async def test_stop_on_failure(self, cwd_tools):
+        """失败应停止后续操作"""
+        tools, cwd = cwd_tools
+        result = await tools["file_manage"].execute({
+            "operations": [
+                {"action": "delete", "path": "nonexist.txt"},
+                {"action": "mkdir", "path": "should_not_create"},
+            ],
+        })
+        assert not (cwd / "should_not_create").exists()
+        assert "中止" in result or "失败" in result
+        assert "未执行" in result
+
+    async def test_sandbox_denied(self, cwd_tools):
+        """沙箱外操作应被拒绝"""
+        tools, cwd = cwd_tools
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "mkdir", "path": "/etc/evil"}],
+        })
+        assert "权限" in result or "沙箱" in result or "失败" in result
+
+    async def test_invalid_action(self, cwd_tools):
+        """无效 action 应返回错误"""
+        tools, cwd = cwd_tools
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "invalid_action", "path": "test"}],
+        })
+        assert "失败" in result or "不支持" in result
+
+    async def test_progress_report(self, cwd_tools):
+        """应逐步报告执行进度"""
+        tools, cwd = cwd_tools
+        result = await tools["file_manage"].execute({
+            "operations": [
+                {"action": "mkdir", "path": "dir1"},
+                {"action": "mkdir", "path": "dir2"},
+            ],
+        })
+        assert "[1/2]" in result
+        assert "[2/2]" in result
+
+    async def test_move_sandbox_check(self, cwd_tools):
+        """move 的 source 需要 read 权限，destination 需要 write 权限"""
+        tools, cwd = cwd_tools
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "move", "source": "/etc/passwd", "destination": "stolen.txt"}],
+        })
+        assert "权限" in result or "沙箱" in result or "失败" in result
+
+    async def test_rename_sandbox_check(self, cwd_tools):
+        """rename 的 source 和 destination 都需要 write 权限"""
+        tools, cwd = cwd_tools
+        result = await tools["file_manage"].execute({
+            "operations": [{"action": "rename", "source": "/etc/hosts", "destination": "/etc/hosts.bak"}],
+        })
+        assert "权限" in result or "沙箱" in result or "失败" in result
