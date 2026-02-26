@@ -143,7 +143,7 @@ class TestAgent:
         agent = Agent(
             model="gpt-4o-mini",
             api_key="test",
-            limits=LoopLimits(max_steps=5, timeout=60.0),
+            limits=LoopLimits(max_steps=5, step_limit_mode="hard"),
         )
         assert agent is not None
 
