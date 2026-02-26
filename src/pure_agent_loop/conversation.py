@@ -43,3 +43,25 @@ class Conversation:
     def reset(self) -> None:
         """清空消息历史，开始新对话"""
         self._messages = []
+
+    async def send_stream(self, task: str) -> AsyncIterator[Event]:
+        """发送消息并流式返回事件
+
+        自动将内部维护的消息历史传递给 Agent，
+        并在 LOOP_END 事件中捕获更新后的消息历史。
+
+        Args:
+            task: 任务描述
+
+        Yields:
+            Event: 执行过程中的结构化事件
+        """
+        # 首次调用时 messages 为空 → 传 None（等同于新对话）
+        # 后续调用时 messages 非空 → 传入历史实现续接
+        msgs = self._messages if self._messages else None
+
+        async for event in self._agent.arun_stream(task, messages=msgs):
+            # 捕获 LOOP_END 事件，更新内部消息历史
+            if event.type == EventType.LOOP_END:
+                self._messages = event.data.get("messages", [])
+            yield event
