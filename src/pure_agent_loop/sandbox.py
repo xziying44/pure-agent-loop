@@ -16,17 +16,24 @@ class Sandbox:
     定义文件工具可访问的路径范围。
 
     Attributes:
+        cwd: 工作目录（自动加入 write_paths），默认为 None
         read_paths: 仅允许读取的路径列表
         write_paths: 允许读写的路径列表（隐含读权限）
     """
 
+    cwd: str | Path | None = None
     read_paths: list[str | Path] = field(default_factory=list)
     write_paths: list[str | Path] = field(default_factory=list)
 
     def __post_init__(self):
-        """将所有路径 resolve 为绝对 Path 对象"""
+        """将所有路径 resolve 为绝对 Path 对象，cwd 自动加入 write_paths"""
         self.read_paths = [Path(p).resolve() for p in self.read_paths]
         self.write_paths = [Path(p).resolve() for p in self.write_paths]
+        if self.cwd is not None:
+            self.cwd = Path(self.cwd).resolve()
+            # cwd 自动拥有读写权限
+            if self.cwd not in self.write_paths:
+                self.write_paths.append(self.cwd)
 
 
 class SandboxGuard:

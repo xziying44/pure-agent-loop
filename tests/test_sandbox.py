@@ -101,3 +101,40 @@ class TestSandboxGuard:
             guard.check_read("/any/file.txt")
         with pytest.raises(SandboxViolationError):
             guard.check_write("/any/file.txt")
+
+
+class TestSandboxCwd:
+    """Sandbox cwd 字段测试"""
+
+    def test_cwd_auto_added_to_write_paths(self, tmp_path):
+        """cwd 应自动加入 write_paths"""
+        sb = Sandbox(cwd=str(tmp_path))
+        assert any(p == tmp_path.resolve() for p in sb.write_paths)
+
+    def test_cwd_resolved_to_absolute(self, tmp_path):
+        """cwd 应被 resolve 为绝对路径"""
+        sb = Sandbox(cwd="./relative")
+        assert sb.cwd.is_absolute()
+
+    def test_cwd_minimal_usage(self, tmp_path):
+        """仅指定 cwd 即可获得读写权限"""
+        sb = Sandbox(cwd=str(tmp_path))
+        guard = SandboxGuard(sb)
+        guard.check_read(tmp_path / "file.txt")
+        guard.check_write(tmp_path / "file.txt")
+
+    def test_cwd_with_extra_paths(self, tmp_path):
+        """cwd + 额外路径应共存"""
+        extra = tmp_path / "extra"
+        extra.mkdir()
+        sb = Sandbox(
+            cwd=str(tmp_path / "work"),
+            read_paths=[str(extra)],
+        )
+        assert sb.cwd == (tmp_path / "work").resolve()
+        assert any(p == extra.resolve() for p in sb.read_paths)
+
+    def test_default_sandbox_no_cwd(self):
+        """默认 Sandbox 无 cwd 时 cwd 应为 None"""
+        sb = Sandbox()
+        assert sb.cwd is None
