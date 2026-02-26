@@ -109,12 +109,22 @@ class ReactLoop:
             step += 1
             checker.current_step = step
 
+            # ---- 硬限制：判断是否为最后一步 ----
+            is_hard_limit_step = checker.is_last_step
+            current_tools = tool_schemas
+            if is_hard_limit_step:
+                # 最后一步：禁用工具，注入硬限制提示
+                current_tools = None
+                msg_history.append(
+                    {"role": "system", "content": self._limits.hard_limit_prompt}
+                )
+
             # ---- 调用 LLM ----
             try:
                 response = await self._retry_handler.execute(
                     self._llm.chat,
                     messages=msg_history,
-                    tools=tool_schemas,
+                    tools=current_tools,
                     **self._llm_kwargs,
                 )
             except Exception as e:
@@ -191,6 +201,30 @@ class ReactLoop:
                         }
                     )
 
+                # 4. 记录工具调用并检测 doom loop
+                for tc in response.tool_calls:
+                    checker.record_tool_call(
+                        tc.name, json.dumps(tc.arguments, sort_keys=True)
+                    )
+
+                if checker.is_doom_loop:
+                    logger.warning(
+                        "检测到 doom loop: 连续 %d 次相同工具调用",
+                        self._limits.doom_loop_threshold,
+                    )
+                    yield Event.error(
+                        step=step,
+                        error=f"检测到 doom loop: 连续 {self._limits.doom_loop_threshold} 次相同工具调用",
+                        fatal=True,
+                    )
+                    yield Event.loop_end(
+                        step=step,
+                        stop_reason="doom_loop",
+                        content=final_content,
+                        messages=msg_history,
+                    )
+                    return
+
             else:
                 # 无工具调用 = 最终回答
                 final_content = response.content or ""
@@ -201,9 +235,11 @@ class ReactLoop:
                     {"role": "assistant", "content": final_content}
                 )
 
+                # 硬限制步骤使用 "max_steps" 作为终止原因
+                stop_reason = "max_steps" if is_hard_limit_step else "completed"
                 yield Event.loop_end(
                     step=step,
-                    stop_reason="completed",
+                    stop_reason=stop_reason,
                     content=final_content,
                     messages=msg_history,
                 )

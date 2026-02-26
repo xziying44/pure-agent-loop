@@ -19,8 +19,10 @@ class MockLLM(BaseLLMClient):
     def __init__(self, responses: list[LLMResponse]):
         self._responses = responses
         self._call_count = 0
+        self._call_history: list[dict] = []  # 记录每次调用的参数
 
     async def chat(self, messages, tools=None, **kwargs):
+        self._call_history.append({"messages": list(messages), "tools": tools})
         response = self._responses[self._call_count]
         self._call_count += 1
         return response
@@ -152,7 +154,7 @@ class TestReactLoop:
         loop = ReactLoop(
             llm=llm,
             tool_registry=registry,
-            limits=LoopLimits(max_steps=3),
+            limits=LoopLimits(max_steps=3, step_limit_mode="soft"),
             retry=RetryConfig(),
         )
 
@@ -569,3 +571,186 @@ class TestReactLoopReasoningEvent:
         # 不应该有 REASONING 事件
         reasoning_events = [e for e in events if e.type == EventType.REASONING]
         assert len(reasoning_events) == 0
+
+
+class TestReactLoopHardLimit:
+    """硬限制模式测试"""
+
+    async def test_hard_limit_disables_tools_and_stops(self):
+        """硬模式达到 max_steps 后，LLM 应无工具调用，循环终止"""
+
+        @tool
+        def noop(x: str) -> str:
+            """空操作"""
+            return "ok"
+
+        registry = ToolRegistry()
+        registry.register(noop)
+
+        # step 1-2: 正常工具调用，step 3: 因 tools=None，LLM 返回纯文本
+        llm = MockLLM([
+            _tool_call_response("noop", {"x": "1"}),
+            _tool_call_response("noop", {"x": "2"}),
+            _text_response("已完成工作总结"),
+        ])
+
+        loop = ReactLoop(
+            llm=llm,
+            tool_registry=registry,
+            limits=LoopLimits(max_steps=3, step_limit_mode="hard"),
+            retry=RetryConfig(),
+        )
+
+        events = []
+        async for event in loop.run("测试硬限制"):
+            events.append(event)
+
+        end_event = next(e for e in events if e.type == EventType.LOOP_END)
+        assert end_event.data["stop_reason"] == "max_steps"
+
+    async def test_hard_limit_injects_prompt(self):
+        """硬模式最后一步应注入 hard_limit_prompt"""
+
+        @tool
+        def noop(x: str) -> str:
+            """空操作"""
+            return "ok"
+
+        registry = ToolRegistry()
+        registry.register(noop)
+
+        # step 1: 工具调用，step 2（最后一步）: 文本响应
+        llm = MockLLM([
+            _tool_call_response("noop", {"x": "1"}),
+            _text_response("总结"),
+        ])
+
+        limits = LoopLimits(max_steps=2, step_limit_mode="hard")
+        loop = ReactLoop(
+            llm=llm,
+            tool_registry=registry,
+            limits=limits,
+            retry=RetryConfig(),
+        )
+
+        events = []
+        async for event in loop.run("测试硬限制提示注入"):
+            events.append(event)
+
+        # 第 2 次 LLM 调用（最后一步）应该没有 tools 参数
+        assert llm._call_history[1]["tools"] is None
+        # 消息中应包含 hard_limit_prompt
+        last_messages = llm._call_history[1]["messages"]
+        system_contents = [
+            m["content"] for m in last_messages if m["role"] == "system"
+        ]
+        assert any(limits.hard_limit_prompt in c for c in system_contents)
+
+    async def test_hard_limit_passes_tools_before_last_step(self):
+        """硬模式未到最后一步时应正常传递 tools"""
+
+        @tool
+        def noop(x: str) -> str:
+            """空操作"""
+            return "ok"
+
+        registry = ToolRegistry()
+        registry.register(noop)
+
+        llm = MockLLM([
+            _tool_call_response("noop", {"x": "1"}),
+            _tool_call_response("noop", {"x": "2"}),
+            _text_response("总结"),
+        ])
+
+        loop = ReactLoop(
+            llm=llm,
+            tool_registry=registry,
+            limits=LoopLimits(max_steps=3, step_limit_mode="hard"),
+            retry=RetryConfig(),
+        )
+
+        events = []
+        async for event in loop.run("测试"):
+            events.append(event)
+
+        # 前两次调用应有 tools
+        assert llm._call_history[0]["tools"] is not None
+        assert llm._call_history[1]["tools"] is not None
+        # 第三次（最后一步）应无 tools
+        assert llm._call_history[2]["tools"] is None
+
+
+class TestReactLoopDoomLoop:
+    """Doom loop 检测测试"""
+
+    async def test_doom_loop_terminates(self):
+        """连续相同工具调用应触发 doom loop 终止"""
+
+        @tool
+        def search(query: str) -> str:
+            """搜索"""
+            return "无结果"
+
+        registry = ToolRegistry()
+        registry.register(search)
+
+        # 连续 3 次完全相同的工具调用
+        llm = MockLLM([
+            _tool_call_response("search", {"query": "test"}),
+            _tool_call_response("search", {"query": "test"}),
+            _tool_call_response("search", {"query": "test"}),
+        ])
+
+        loop = ReactLoop(
+            llm=llm,
+            tool_registry=registry,
+            limits=LoopLimits(doom_loop_threshold=3),
+            retry=RetryConfig(),
+        )
+
+        events = []
+        async for event in loop.run("测试 doom loop"):
+            events.append(event)
+
+        # 应产出 ERROR 事件
+        error_events = [e for e in events if e.type == EventType.ERROR]
+        assert len(error_events) >= 1
+
+        # 应以 doom_loop 终止
+        end_event = next(e for e in events if e.type == EventType.LOOP_END)
+        assert end_event.data["stop_reason"] == "doom_loop"
+
+    async def test_no_doom_loop_with_different_args(self):
+        """不同参数的工具调用不触发 doom loop"""
+
+        @tool
+        def search(query: str) -> str:
+            """搜索"""
+            return f"结果: {query}"
+
+        registry = ToolRegistry()
+        registry.register(search)
+
+        # 3 次相同工具名但不同参数
+        llm = MockLLM([
+            _tool_call_response("search", {"query": "a"}),
+            _tool_call_response("search", {"query": "b"}),
+            _tool_call_response("search", {"query": "c"}),
+            _text_response("完成"),
+        ])
+
+        loop = ReactLoop(
+            llm=llm,
+            tool_registry=registry,
+            limits=LoopLimits(doom_loop_threshold=3),
+            retry=RetryConfig(),
+        )
+
+        events = []
+        async for event in loop.run("测试不同参数"):
+            events.append(event)
+
+        # 应正常完成
+        end_event = next(e for e in events if e.type == EventType.LOOP_END)
+        assert end_event.data["stop_reason"] == "completed"
