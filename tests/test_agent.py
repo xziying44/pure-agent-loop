@@ -277,3 +277,69 @@ class TestAgentThinkingMode:
         )
         # 验证内部 LLM 客户端的 thinking_level
         assert agent._llm.thinking_level == "medium"
+
+
+from pure_agent_loop.sandbox import Sandbox
+
+
+class TestAgentSandboxIntegration:
+    """Agent 沙箱集成测试"""
+
+    def test_sandbox_none_no_file_tools(self):
+        """sandbox=None 时不应注册文件工具"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm)
+        assert agent._tool_registry.get("file_read") is None
+        assert agent._tool_registry.get("file_write") is None
+
+    def test_sandbox_registers_file_tools(self, tmp_path):
+        """sandbox 存在时应自动注册 5 个文件工具"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(
+            llm=mock_llm,
+            sandbox=Sandbox(
+                read_paths=[str(tmp_path / "read")],
+                write_paths=[str(tmp_path / "write")],
+            ),
+        )
+        assert agent._tool_registry.get("file_read") is not None
+        assert agent._tool_registry.get("file_search") is not None
+        assert agent._tool_registry.get("file_grep") is not None
+        assert agent._tool_registry.get("file_edit") is not None
+        assert agent._tool_registry.get("file_write") is not None
+
+    def test_sandbox_coexists_with_user_tools(self, tmp_path):
+        """文件工具应与用户自定义工具共存"""
+
+        @tool
+        def my_tool(query: str) -> str:
+            """自定义工具"""
+            return "result"
+
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(
+            llm=mock_llm,
+            tools=[my_tool],
+            sandbox=Sandbox(write_paths=[str(tmp_path)]),
+        )
+        assert agent._tool_registry.get("my_tool") is not None
+        assert agent._tool_registry.get("file_read") is not None
+        assert agent._tool_registry.get("todo_write") is not None
+
+    async def test_file_read_via_agent(self, tmp_path):
+        """通过 Agent 执行 file_read 应正常工作"""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("hello from agent")
+
+        mock_llm = MockLLM([
+            _tool_call_response("file_read", {"file_path": str(test_file)}),
+            _text_response("文件内容是 hello from agent"),
+        ])
+        agent = Agent(
+            llm=mock_llm,
+            sandbox=Sandbox(read_paths=[str(tmp_path)]),
+        )
+        result = await agent.arun("读取文件")
+        assert result.content == "文件内容是 hello from agent"
+        action_events = [e for e in result.events if e.type == EventType.ACTION]
+        assert any(e.data["tool"] == "file_read" for e in action_events)

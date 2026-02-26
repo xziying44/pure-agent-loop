@@ -19,6 +19,8 @@ from .retry import RetryConfig
 from .tool import Tool, ToolRegistry
 from .builtin_tools import TodoStore, create_todo_tool
 from .prompts import build_system_prompt
+from .sandbox import Sandbox, SandboxGuard
+from .file_tools import create_file_tools
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,7 @@ class Agent:
         temperature: 温度参数
         thinking_level: 思考深度（off/low/medium/high），默认 off
         emit_reasoning_events: 是否推送 REASONING 事件，默认 False
+        sandbox: 沙箱配置，启用后自动注册文件工具
         skills_dir: Skill 目录路径（支持字符串或列表）
         **llm_kwargs: 透传给 LLM 调用的额外参数
     """
@@ -90,6 +93,7 @@ class Agent:
         temperature: float = 0.7,
         thinking_level: ThinkingLevel = "off",
         emit_reasoning_events: bool = False,
+        sandbox: Sandbox | None = None,
         skills_dir: str | list[str] | None = None,
         **llm_kwargs: Any,
     ):
@@ -117,6 +121,12 @@ class Agent:
         self._tool_registry.register(create_todo_tool(self._todo_store))
         if tools:
             self._tool_registry.register_many(tools)
+
+        # 注册文件工具（如果配置了沙箱）
+        if sandbox:
+            file_guard = SandboxGuard(sandbox)
+            file_tools = create_file_tools(file_guard)
+            self._tool_registry.register_many(file_tools)
 
         # 构建完整系统提示词
         self._system_prompt = build_system_prompt(
