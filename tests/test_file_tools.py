@@ -206,3 +206,75 @@ class TestFileSearch:
             "pattern": "*.xyz", "path": str(read_dir),
         })
         assert "未找到" in result or "0" in result
+
+
+class TestFileGrep:
+    """file_grep 工具测试"""
+
+    async def test_grep_finds_matches(self, tools, sandbox_dirs):
+        """应能找到匹配内容"""
+        read_dir, _, _ = sandbox_dirs
+        (read_dir / "main.py").write_text("def hello():\n    print('world')\n")
+        result = await tools["file_grep"].execute({
+            "pattern": "def hello", "path": str(read_dir),
+        })
+        assert "main.py" in result
+        assert "def hello" in result
+
+    async def test_grep_with_line_numbers(self, tools, sandbox_dirs):
+        """结果应包含行号"""
+        read_dir, _, _ = sandbox_dirs
+        (read_dir / "test.py").write_text("aaa\nbbb\nccc\n")
+        result = await tools["file_grep"].execute({
+            "pattern": "bbb", "path": str(read_dir),
+        })
+        assert "2" in result  # 第 2 行
+
+    async def test_grep_with_include_filter(self, tools, sandbox_dirs):
+        """include 参数应过滤文件类型"""
+        read_dir, _, _ = sandbox_dirs
+        (read_dir / "code.py").write_text("hello world")
+        (read_dir / "note.md").write_text("hello world")
+        result = await tools["file_grep"].execute({
+            "pattern": "hello", "path": str(read_dir), "include": "*.py",
+        })
+        assert "code.py" in result
+        assert "note.md" not in result
+
+    async def test_grep_regex_support(self, tools, sandbox_dirs):
+        """应支持正则表达式"""
+        read_dir, _, _ = sandbox_dirs
+        (read_dir / "data.txt").write_text("foo123bar\nfoo456bar\nhello\n")
+        result = await tools["file_grep"].execute({
+            "pattern": r"foo\d+bar", "path": str(read_dir),
+        })
+        assert "foo123bar" in result
+        assert "foo456bar" in result
+        assert "hello" not in result
+
+    async def test_grep_denied_outside_sandbox(self, tools, sandbox_dirs):
+        """沙箱外目录应拒绝搜索"""
+        _, _, outside_dir = sandbox_dirs
+        result = await tools["file_grep"].execute({
+            "pattern": "secret", "path": str(outside_dir),
+        })
+        assert "权限" in result or "沙箱" in result
+
+    async def test_grep_no_matches(self, tools, sandbox_dirs):
+        """无匹配时应返回提示"""
+        read_dir, _, _ = sandbox_dirs
+        (read_dir / "empty.txt").write_text("nothing here")
+        result = await tools["file_grep"].execute({
+            "pattern": "xyz_not_found", "path": str(read_dir),
+        })
+        assert "未找到" in result or "0" in result
+
+    async def test_grep_max_results(self, tools, sandbox_dirs):
+        """结果应限制在 100 个以内"""
+        read_dir, _, _ = sandbox_dirs
+        content = "\n".join(f"match_line_{i}" for i in range(150))
+        (read_dir / "big.txt").write_text(content)
+        result = await tools["file_grep"].execute({
+            "pattern": "match_line_", "path": str(read_dir),
+        })
+        assert "100" in result or "截断" in result

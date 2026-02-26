@@ -179,10 +179,69 @@ def create_file_tools(guard: SandboxGuard) -> list[Tool]:
 
         Args:
             pattern: 正则表达式
-            path: 搜索目录
+            path: 搜索目录，默认为第一个可读路径
             include: 文件名过滤模式，如 '*.py'
         """
-        return "⚠️ file_grep 尚未实现"
+        import re
+        import fnmatch
+
+        if path:
+            search_path = Path(path).resolve()
+            guard.check_read(search_path)
+        else:
+            readable = guard._all_readable_paths()
+            if not readable:
+                return "⚠️ 沙箱中没有可读路径"
+            search_path = readable[0]
+
+        if not search_path.exists() or not search_path.is_dir():
+            return f"⚠️ 目录不存在: '{path}'"
+
+        try:
+            regex = re.compile(pattern)
+        except re.error as e:
+            return f"⚠️ 无效的正则表达式: {e}"
+
+        matches = []
+        max_matches = 100
+
+        for file_path in search_path.rglob("*"):
+            if len(matches) >= max_matches:
+                break
+            if not file_path.is_file():
+                continue
+            if any(part in IGNORED_DIRS for part in file_path.parts):
+                continue
+            if not guard.is_readable(file_path):
+                continue
+            if include and not fnmatch.fnmatch(file_path.name, include):
+                continue
+            if _is_binary(file_path):
+                continue
+
+            try:
+                text = file_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            for line_num, line in enumerate(text.splitlines(), 1):
+                if regex.search(line):
+                    try:
+                        rel = file_path.relative_to(search_path)
+                    except ValueError:
+                        rel = file_path
+                    display_line = line[:200] if len(line) > 200 else line
+                    matches.append(f"{rel}:{line_num}: {display_line}")
+                    if len(matches) >= max_matches:
+                        break
+
+        if not matches:
+            return f"未找到匹配 '{pattern}' 的内容"
+
+        header = f"找到 {len(matches)} 个匹配:"
+        if len(matches) >= max_matches:
+            header += " (结果已截断，仅显示前 100 个)"
+        return header + "\n" + "\n".join(matches)
 
     def file_edit(file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
         """精确替换文件中的文本
