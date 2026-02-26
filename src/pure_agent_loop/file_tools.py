@@ -299,7 +299,35 @@ def create_file_tools(guard: SandboxGuard) -> list[Tool]:
             file_path: 文件路径
             content: 完整的文件内容
         """
-        return "⚠️ file_write 尚未实现"
+        import difflib
+
+        path = Path(file_path).resolve()
+        guard.check_write(path)
+
+        is_new = not path.exists()
+        old_content = ""
+        if not is_new:
+            old_content = path.read_text(encoding="utf-8", errors="replace")
+
+        # 创建父目录
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 写入文件
+        path.write_text(content, encoding="utf-8")
+
+        if is_new:
+            line_count = len(content.splitlines())
+            return f"✅ 新建文件: {file_path} ({line_count} 行)"
+
+        # 生成 diff
+        diff = difflib.unified_diff(
+            old_content.splitlines(keepends=True),
+            content.splitlines(keepends=True),
+            fromfile=f"a/{path.name}",
+            tofile=f"b/{path.name}",
+        )
+        diff_text = "".join(diff)
+        return f"✅ 已重写文件: {file_path}\n\n{diff_text}"
 
     # 构建 Tool 对象列表
     from .tool import _build_tool

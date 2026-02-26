@@ -382,3 +382,74 @@ class TestFileEdit:
         })
         assert "old_line" in result
         assert "new_line" in result
+
+
+class TestFileWrite:
+    """file_write 工具测试"""
+
+    async def test_write_creates_new_file(self, tools, sandbox_dirs):
+        """应能创建新文件"""
+        _, write_dir, _ = sandbox_dirs
+        f = write_dir / "new.py"
+        result = await tools["file_write"].execute({
+            "file_path": str(f),
+            "content": "print('hello')\n",
+        })
+        assert f.exists()
+        assert f.read_text() == "print('hello')\n"
+        assert "新建" in result or "创建" in result
+
+    async def test_write_overwrites_existing(self, tools, sandbox_dirs):
+        """应能覆盖已有文件"""
+        _, write_dir, _ = sandbox_dirs
+        f = write_dir / "exist.py"
+        f.write_text("old content")
+        result = await tools["file_write"].execute({
+            "file_path": str(f),
+            "content": "new content",
+        })
+        assert f.read_text() == "new content"
+        assert "diff" in result.lower() or "---" in result
+
+    async def test_write_creates_parent_dirs(self, tools, sandbox_dirs):
+        """应自动创建不存在的父目录"""
+        _, write_dir, _ = sandbox_dirs
+        f = write_dir / "deep" / "nested" / "file.py"
+        await tools["file_write"].execute({
+            "file_path": str(f),
+            "content": "pass\n",
+        })
+        assert f.exists()
+        assert f.read_text() == "pass\n"
+
+    async def test_write_denied_in_read_paths(self, tools, sandbox_dirs):
+        """read_paths 内应拒绝写入"""
+        read_dir, _, _ = sandbox_dirs
+        f = read_dir / "readonly.py"
+        result = await tools["file_write"].execute({
+            "file_path": str(f),
+            "content": "hacked",
+        })
+        assert "权限" in result or "沙箱" in result
+        assert not f.exists()
+
+    async def test_write_denied_outside_sandbox(self, tools, sandbox_dirs):
+        """沙箱外应拒绝写入"""
+        _, _, outside_dir = sandbox_dirs
+        result = await tools["file_write"].execute({
+            "file_path": str(outside_dir / "evil.py"),
+            "content": "evil",
+        })
+        assert "权限" in result or "沙箱" in result
+
+    async def test_write_returns_diff_for_existing(self, tools, sandbox_dirs):
+        """覆盖已有文件时应返回 diff"""
+        _, write_dir, _ = sandbox_dirs
+        f = write_dir / "diff.py"
+        f.write_text("line1\nline2\n")
+        result = await tools["file_write"].execute({
+            "file_path": str(f),
+            "content": "line1\nline3\n",
+        })
+        assert "line2" in result
+        assert "line3" in result
