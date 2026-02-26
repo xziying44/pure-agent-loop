@@ -133,3 +133,76 @@ class TestFileRead:
             if line.startswith(("⚠", "📁")):
                 continue
             assert len(line) <= 2100  # 2000 + 行号 + tab + 余量
+
+
+class TestFileSearch:
+    """file_search 工具测试"""
+
+    async def test_search_finds_files(self, tools, sandbox_dirs):
+        """应能找到匹配的文件"""
+        read_dir, _, _ = sandbox_dirs
+        (read_dir / "main.py").write_text("print('hello')")
+        (read_dir / "utils.py").write_text("pass")
+        (read_dir / "readme.md").write_text("# readme")
+        result = await tools["file_search"].execute({
+            "pattern": "*.py", "path": str(read_dir),
+        })
+        assert "main.py" in result
+        assert "utils.py" in result
+        assert "readme.md" not in result
+
+    async def test_search_recursive(self, tools, sandbox_dirs):
+        """应支持递归搜索"""
+        read_dir, _, _ = sandbox_dirs
+        sub = read_dir / "sub"
+        sub.mkdir()
+        (sub / "deep.py").write_text("pass")
+        result = await tools["file_search"].execute({
+            "pattern": "**/*.py", "path": str(read_dir),
+        })
+        assert "deep.py" in result
+
+    async def test_search_denied_outside_sandbox(self, tools, sandbox_dirs):
+        """沙箱外目录应拒绝搜索"""
+        _, _, outside_dir = sandbox_dirs
+        result = await tools["file_search"].execute({
+            "pattern": "*.py", "path": str(outside_dir),
+        })
+        assert "权限" in result or "沙箱" in result
+
+    async def test_search_skips_ignored_dirs(self, tools, sandbox_dirs):
+        """应跳过 .git、__pycache__ 等目录"""
+        read_dir, _, _ = sandbox_dirs
+        git_dir = read_dir / ".git"
+        git_dir.mkdir()
+        (git_dir / "config").write_text("git config")
+        (read_dir / "main.py").write_text("pass")
+        result = await tools["file_search"].execute({
+            "pattern": "**/*", "path": str(read_dir),
+        })
+        assert "config" not in result or ".git" not in result
+
+    async def test_search_max_results(self, tools, sandbox_dirs):
+        """结果应限制在 100 个以内"""
+        read_dir, _, _ = sandbox_dirs
+        for i in range(120):
+            (read_dir / f"file_{i}.txt").write_text(f"content {i}")
+        result = await tools["file_search"].execute({
+            "pattern": "*.txt", "path": str(read_dir),
+        })
+        assert "100" in result or "截断" in result or "truncated" in result
+
+    async def test_search_default_path(self, tools, sandbox_dirs):
+        """未指定 path 时应使用第一个可读路径"""
+        read_dir, _, _ = sandbox_dirs
+        (read_dir / "default.py").write_text("pass")
+        result = await tools["file_search"].execute({"pattern": "*.py"})
+        assert "default.py" in result
+
+    async def test_search_no_matches(self, tools, sandbox_dirs):
+        """无匹配时应返回提示"""
+        read_dir, _, _ = sandbox_dirs
+        result = await tools["file_search"].execute({
+            "pattern": "*.xyz", "path": str(read_dir),
+        })
+        assert "未找到" in result or "0" in result

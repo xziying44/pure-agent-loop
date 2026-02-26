@@ -116,15 +116,63 @@ def create_file_tools(guard: SandboxGuard) -> list[Tool]:
 
         return _read_file(path, offset, limit)
 
-    # 占位：后续 Task 实现
+    # 忽略的目录名
+    IGNORED_DIRS = frozenset({
+        ".git", "__pycache__", "node_modules", ".venv", "venv",
+        ".tox", ".mypy_cache", ".pytest_cache", "dist", "build",
+        ".idea", ".vscode", ".eggs", "*.egg-info",
+    })
+
     def file_search(pattern: str, path: str | None = None) -> str:
         """按文件名模式搜索文件
 
         Args:
             pattern: glob 模式，如 '**/*.py'
-            path: 搜索起始目录
+            path: 搜索起始目录，默认为第一个可读路径
         """
-        return "⚠️ file_search 尚未实现"
+        if path:
+            search_path = Path(path).resolve()
+            guard.check_read(search_path)
+        else:
+            readable = guard._all_readable_paths()
+            if not readable:
+                return "⚠️ 沙箱中没有可读路径"
+            search_path = readable[0]
+
+        if not search_path.exists() or not search_path.is_dir():
+            return f"⚠️ 目录不存在: '{path}'"
+
+        matches = []
+        for p in search_path.glob(pattern):
+            # 跳过忽略目录
+            if any(part in IGNORED_DIRS for part in p.parts):
+                continue
+            if not p.is_file():
+                continue
+            if not guard.is_readable(p):
+                continue
+            matches.append(p)
+            if len(matches) >= 100:
+                break
+
+        if not matches:
+            return f"未找到匹配 '{pattern}' 的文件"
+
+        # 按修改时间降序排列
+        matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+
+        lines = [f"找到 {len(matches)} 个文件:"]
+        for m in matches:
+            try:
+                rel = m.relative_to(search_path)
+            except ValueError:
+                rel = m
+            lines.append(f"  {rel}")
+
+        if len(matches) >= 100:
+            lines.append("  ... (结果已截断，仅显示前 100 个)")
+
+        return "\n".join(lines)
 
     def file_grep(pattern: str, path: str | None = None, include: str | None = None) -> str:
         """按正则表达式搜索文件内容
