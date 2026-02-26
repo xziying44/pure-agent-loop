@@ -3,7 +3,7 @@
 import warnings
 
 import pytest
-from pure_agent_loop.tool import tool, Tool, ToolRegistry
+from pure_agent_loop.tool import tool, Tool, ToolRegistry, _coerce_arguments
 
 
 class TestToolDecorator:
@@ -713,3 +713,85 @@ class TestRegistryAutoRouting:
         assert "self" not in func["parameters"]["properties"]
         assert "endpoint" in func["parameters"]["required"]
         assert "method" not in func["parameters"]["required"]
+
+
+class TestArgumentTypeCoercion:
+    """参数类型强转测试"""
+
+    def test_str_to_int(self):
+        """字符串应被转换为整数"""
+        props = {"offset": {"type": "integer"}}
+        result = _coerce_arguments({"offset": "265"}, props)
+        assert result["offset"] == 265
+        assert isinstance(result["offset"], int)
+
+    def test_str_to_float(self):
+        """字符串应被转换为浮点数"""
+        props = {"value": {"type": "number"}}
+        result = _coerce_arguments({"value": "3.14"}, props)
+        assert result["value"] == 3.14
+        assert isinstance(result["value"], float)
+
+    def test_str_to_bool(self):
+        """字符串应被转换为布尔值"""
+        props = {"verbose": {"type": "boolean"}}
+        assert _coerce_arguments({"verbose": "true"}, props)["verbose"] is True
+        assert _coerce_arguments({"verbose": "1"}, props)["verbose"] is True
+        assert _coerce_arguments({"verbose": "yes"}, props)["verbose"] is True
+        assert _coerce_arguments({"verbose": "false"}, props)["verbose"] is False
+        assert _coerce_arguments({"verbose": "no"}, props)["verbose"] is False
+
+    def test_str_to_array(self):
+        """字符串应被转换为数组"""
+        props = {"items": {"type": "array"}}
+        result = _coerce_arguments({"items": '[1, 2, 3]'}, props)
+        assert result["items"] == [1, 2, 3]
+
+    def test_str_to_object(self):
+        """字符串应被转换为对象"""
+        props = {"config": {"type": "object"}}
+        result = _coerce_arguments({"config": '{"key": "val"}'}, props)
+        assert result["config"] == {"key": "val"}
+
+    def test_already_correct_type_unchanged(self):
+        """已是正确类型的值不应被重复转换"""
+        props = {"offset": {"type": "integer"}, "value": {"type": "number"}}
+        result = _coerce_arguments({"offset": 265, "value": 3.14}, props)
+        assert result["offset"] == 265
+        assert result["value"] == 3.14
+
+    def test_conversion_failure_keeps_original(self):
+        """转换失败应保持原值"""
+        props = {"offset": {"type": "integer"}}
+        result = _coerce_arguments({"offset": "not_a_number"}, props)
+        assert result["offset"] == "not_a_number"
+
+    def test_none_value_skipped(self):
+        """None 值不应被转换"""
+        props = {"offset": {"type": "integer"}}
+        result = _coerce_arguments({"offset": None}, props)
+        assert result["offset"] is None
+
+    def test_unknown_param_passthrough(self):
+        """不在 properties 中的参数原样保留"""
+        result = _coerce_arguments({"extra": "123"}, {})
+        assert result["extra"] == "123"
+
+    @pytest.mark.asyncio
+    async def test_execute_coerces_string_to_int(self):
+        """端到端：Tool.execute() 应自动将字符串参数强转为正确类型"""
+
+        @tool
+        def read_file(path: str, offset: int = 0) -> str:
+            """读取文件
+
+            Args:
+                path: 文件路径
+                offset: 偏移量
+            """
+            assert isinstance(offset, int)
+            return f"{path}:{offset}"
+
+        # LLM 返回了字符串形式的 offset
+        result = await read_file.execute({"path": "test.txt", "offset": "265"})
+        assert result == "test.txt:265"

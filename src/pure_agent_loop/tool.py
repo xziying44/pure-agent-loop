@@ -5,6 +5,7 @@
 
 import asyncio
 import inspect
+import json
 import re
 import warnings
 from dataclasses import dataclass, field
@@ -20,6 +21,46 @@ _TYPE_MAP: dict[type, str] = {
     list: "array",
     dict: "object",
 }
+
+
+def _coerce_arguments(
+    arguments: dict[str, Any], properties: dict[str, Any]
+) -> dict[str, Any]:
+    """根据 JSON Schema 类型定义，对字符串值做宽容强转
+
+    仅对 isinstance(value, str) 的值尝试转换，已是正确类型或不在 schema 中的参数原样保留。
+    转换失败时保持原值，让函数自己报错。
+
+    Args:
+        arguments: 工具参数字典
+        properties: JSON Schema 的 properties 定义
+
+    Returns:
+        强转后的参数字典
+    """
+    coerced = {}
+    for key, value in arguments.items():
+        # None 值、非字符串值、不在 schema 中的参数，原样保留
+        if value is None or not isinstance(value, str) or key not in properties:
+            coerced[key] = value
+            continue
+
+        expected_type = properties[key].get("type")
+        try:
+            if expected_type == "integer":
+                coerced[key] = int(value)
+            elif expected_type == "number":
+                coerced[key] = float(value)
+            elif expected_type == "boolean":
+                coerced[key] = value.lower() in ("true", "1", "yes")
+            elif expected_type in ("array", "object"):
+                coerced[key] = json.loads(value)
+            else:
+                coerced[key] = value
+        except (ValueError, json.JSONDecodeError):
+            # 转换失败保持原值
+            coerced[key] = value
+    return coerced
 
 
 def _parse_google_docstring(docstring: str) -> tuple[str, dict[str, str]]:
@@ -128,10 +169,13 @@ class Tool:
             工具执行结果（字符串）
         """
         try:
+            coerced = _coerce_arguments(
+                arguments, self.parameters.get("properties", {})
+            )
             if self.is_async:
-                result = await self.function(**arguments)
+                result = await self.function(**coerced)
             else:
-                result = self.function(**arguments)
+                result = self.function(**coerced)
             return str(result)
         except Exception as e:
             return (
