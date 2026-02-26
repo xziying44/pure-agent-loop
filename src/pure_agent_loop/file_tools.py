@@ -118,11 +118,11 @@ def create_file_tools(guard: SandboxGuard, cwd: Path | None = None) -> list[Tool
         """读取文件内容
 
         Args:
-            file_path: 文件的绝对路径
+            file_path: 文件路径（支持相对路径）
             offset: 起始行号（从 1 开始），不指定则从头读取
             limit: 最多读取的行数，默认 2000
         """
-        path = Path(file_path).resolve()
+        path = _resolve_path(file_path)
 
         # 权限检查
         guard.check_read(path)
@@ -145,16 +145,10 @@ def create_file_tools(guard: SandboxGuard, cwd: Path | None = None) -> list[Tool
 
         Args:
             pattern: glob 模式，如 '**/*.py'
-            path: 搜索起始目录，默认为第一个可读路径
+            path: 搜索起始目录，默认为工作目录或第一个可读路径
         """
-        if path:
-            search_path = Path(path).resolve()
-            guard.check_read(search_path)
-        else:
-            readable = guard._all_readable_paths()
-            if not readable:
-                return "⚠️ 沙箱中没有可读路径"
-            search_path = readable[0]
+        search_path = _resolve_path(path)
+        guard.check_read(search_path)
 
         if not search_path.exists() or not search_path.is_dir():
             return f"⚠️ 目录不存在: '{path}'"
@@ -196,20 +190,14 @@ def create_file_tools(guard: SandboxGuard, cwd: Path | None = None) -> list[Tool
 
         Args:
             pattern: 正则表达式
-            path: 搜索目录，默认为第一个可读路径
+            path: 搜索目录，默认为工作目录或第一个可读路径
             include: 文件名过滤模式，如 '*.py'
         """
         import re
         import fnmatch
 
-        if path:
-            search_path = Path(path).resolve()
-            guard.check_read(search_path)
-        else:
-            readable = guard._all_readable_paths()
-            if not readable:
-                return "⚠️ 沙箱中没有可读路径"
-            search_path = readable[0]
+        search_path = _resolve_path(path)
+        guard.check_read(search_path)
 
         if not search_path.exists() or not search_path.is_dir():
             return f"⚠️ 目录不存在: '{path}'"
@@ -271,7 +259,7 @@ def create_file_tools(guard: SandboxGuard, cwd: Path | None = None) -> list[Tool
         """
         import difflib
 
-        path = Path(file_path).resolve()
+        path = _resolve_path(file_path)
         guard.check_write(path)
 
         if not path.exists():
@@ -318,7 +306,7 @@ def create_file_tools(guard: SandboxGuard, cwd: Path | None = None) -> list[Tool
         """
         import difflib
 
-        path = Path(file_path).resolve()
+        path = _resolve_path(file_path)
         guard.check_write(path)
 
         is_new = not path.exists()

@@ -720,3 +720,56 @@ class TestFileManage:
             "operations": [{"action": "rename", "source": "/etc/hosts", "destination": "/etc/hosts.bak"}],
         })
         assert "权限" in result or "沙箱" in result or "失败" in result
+
+
+class TestRelativePathResolution:
+    """测试文件工具的相对路径解析"""
+
+    async def test_file_read_relative_path(self, cwd_tools):
+        """file_read 应支持相对路径（基于 cwd）"""
+        tools, cwd = cwd_tools
+        (cwd / "hello.txt").write_text("hello world")
+        result = await tools["file_read"].execute({"file_path": "hello.txt"})
+        assert "hello world" in result
+
+    async def test_file_write_relative_path(self, cwd_tools):
+        """file_write 应支持相对路径（基于 cwd）"""
+        tools, cwd = cwd_tools
+        result = await tools["file_write"].execute({
+            "file_path": "new_file.txt",
+            "content": "content",
+        })
+        assert (cwd / "new_file.txt").read_text() == "content"
+
+    async def test_file_edit_relative_path(self, cwd_tools):
+        """file_edit 应支持相对路径（基于 cwd）"""
+        tools, cwd = cwd_tools
+        (cwd / "edit_me.txt").write_text("old text")
+        result = await tools["file_edit"].execute({
+            "file_path": "edit_me.txt",
+            "old_string": "old text",
+            "new_string": "new text",
+        })
+        assert (cwd / "edit_me.txt").read_text() == "new text"
+
+    async def test_file_search_relative_path(self, cwd_tools):
+        """file_search 的 path 参数应支持相对路径"""
+        tools, cwd = cwd_tools
+        sub = cwd / "subdir"
+        sub.mkdir()
+        (sub / "found.py").write_text("pass")
+        result = await tools["file_search"].execute({
+            "pattern": "*.py", "path": "subdir",
+        })
+        assert "found.py" in result
+
+    async def test_file_grep_relative_path(self, cwd_tools):
+        """file_grep 的 path 参数应支持相对路径"""
+        tools, cwd = cwd_tools
+        sub = cwd / "subdir"
+        sub.mkdir()
+        (sub / "code.py").write_text("special_string")
+        result = await tools["file_grep"].execute({
+            "pattern": "special_string", "path": "subdir",
+        })
+        assert "code.py" in result
