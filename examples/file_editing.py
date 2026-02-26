@@ -39,8 +39,7 @@ async def main():
 
     # 配置沙箱：Agent 只能在 output 目录内读写文件
     sandbox = Sandbox(
-        write_paths=[str(OUTPUT_DIR)],
-        read_paths=[str(OUTPUT_DIR)],
+        cwd=str(OUTPUT_DIR)
     )
 
     agent = Agent(
@@ -52,7 +51,7 @@ async def main():
         # 分步编码 + 自查验证需要较多轮次
         limits=LoopLimits(max_steps=20),
         system_prompt=(
-            "你是一个严谨的前端开发工程师，擅长编写高质量的 Web 页面。\n\n"
+            "你是一个严谨的前端开发工程师，擅长编写高质量的 Web 页面，页面为纯静态页面，入口文件为index.html，不依赖脚手架。\n\n"
             "## 工作流程\n"
             "收到用户需求后，严格按以下步骤执行：\n"
             "1. **需求分析** — 理解用户意图，明确功能点和交付物\n"
@@ -74,7 +73,7 @@ async def main():
         ),
     )
 
-    task = f"""请在 {OUTPUT_DIR} 目录设计一个大模型聊天web，要求前端用户可以登录注册，实现简单的聊天。后台管理员固定账号密码为admin，可以查看注册的用户，和查看用户的聊天记录。"""
+    task = f"""设计一个大模型聊天web，要求前端用户可以登录注册，实现简单的聊天。后台管理员固定账号密码为admin，可以查看注册的用户，和查看用户的聊天记录。样式要现代化和简约风格，不能直接是紫色背景"""
 
     renderer = Renderer()
 
@@ -86,7 +85,7 @@ async def main():
             print(output)
 
 
-    task = f"""请在 {OUTPUT_DIR} 的基础上新增一个日志管理功能。"""
+    task = f"""在基础上新增一个日志管理功能。"""
 
     renderer = Renderer()
 
