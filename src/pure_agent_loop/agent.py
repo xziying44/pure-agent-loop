@@ -123,16 +123,19 @@ class Agent:
             self._tool_registry.register_many(tools)
 
         # 注册文件工具（如果配置了沙箱）
+        sandbox_prompt = ""
         if sandbox:
             file_guard = SandboxGuard(sandbox)
-            file_tools = create_file_tools(file_guard)
+            file_tools = create_file_tools(file_guard, cwd=sandbox.cwd)
             self._tool_registry.register_many(file_tools)
+            if sandbox.cwd:
+                sandbox_prompt = f"\n\n你的工作目录是：{sandbox.cwd}\n所有相对路径都基于此目录解析。"
 
         # 构建完整系统提示词
         self._system_prompt = build_system_prompt(
             name=name,
             user_prompt=system_prompt,
-        )
+        ) + sandbox_prompt
         self._limits = limits or LoopLimits()
         self._retry = retry or RetryConfig()
         self._llm_kwargs: dict[str, Any] = {"temperature": temperature, **llm_kwargs}

@@ -293,7 +293,7 @@ class TestAgentSandboxIntegration:
         assert agent._tool_registry.get("file_write") is None
 
     def test_sandbox_registers_file_tools(self, tmp_path):
-        """sandbox 存在时应自动注册 5 个文件工具"""
+        """sandbox 存在时应自动注册 7 个文件工具"""
         mock_llm = MockLLM([_text_response("你好")])
         agent = Agent(
             llm=mock_llm,
@@ -307,6 +307,8 @@ class TestAgentSandboxIntegration:
         assert agent._tool_registry.get("file_grep") is not None
         assert agent._tool_registry.get("file_edit") is not None
         assert agent._tool_registry.get("file_write") is not None
+        assert agent._tool_registry.get("file_tree") is not None
+        assert agent._tool_registry.get("file_manage") is not None
 
     def test_sandbox_coexists_with_user_tools(self, tmp_path):
         """文件工具应与用户自定义工具共存"""
@@ -343,3 +345,22 @@ class TestAgentSandboxIntegration:
         assert result.content == "文件内容是 hello from agent"
         action_events = [e for e in result.events if e.type == EventType.ACTION]
         assert any(e.data["tool"] == "file_read" for e in action_events)
+
+    def test_sandbox_cwd_injects_prompt(self, tmp_path):
+        """Agent 使用 sandbox cwd 时应在系统提示词中包含工作目录信息"""
+        mock_llm = MockLLM([_text_response("done")])
+        agent = Agent(
+            llm=mock_llm,
+            sandbox=Sandbox(cwd=str(tmp_path)),
+        )
+        assert "工作目录" in agent._system_prompt
+        assert str(tmp_path.resolve()) in agent._system_prompt
+
+    def test_sandbox_without_cwd_no_cwd_prompt(self, tmp_path):
+        """sandbox 无 cwd 时系统提示词不应包含工作目录信息"""
+        mock_llm = MockLLM([_text_response("done")])
+        agent = Agent(
+            llm=mock_llm,
+            sandbox=Sandbox(write_paths=[str(tmp_path)]),
+        )
+        assert "工作目录" not in agent._system_prompt
