@@ -47,6 +47,9 @@ htmlcov/
 # Environment
 examples/.env
 
+# Examples output
+examples/output/
+
 # Misc
 .DS_Store
 Thumbs.db
