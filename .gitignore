@@ -50,6 +50,9 @@ examples/.env
 # Examples output
 examples/output/
 
+# Worktrees
+.worktrees/
+
 # Misc
 .DS_Store
 Thumbs.db
