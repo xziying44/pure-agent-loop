@@ -38,16 +38,19 @@ def tools(guard):
 class TestCreateFileTools:
     """create_file_tools 工厂函数测试"""
 
-    def test_returns_five_tools(self, guard):
-        """应返回 5 个工具"""
+    def test_returns_six_tools(self, guard):
+        """应返回 6 个工具"""
         tools = create_file_tools(guard)
-        assert len(tools) == 5
+        assert len(tools) == 6
         assert all(isinstance(t, Tool) for t in tools)
 
     def test_tool_names(self, guard):
         """工具名称应正确"""
         names = {t.name for t in create_file_tools(guard)}
-        assert names == {"file_read", "file_search", "file_grep", "file_edit", "file_write"}
+        assert names == {
+            "file_read", "file_search", "file_grep",
+            "file_edit", "file_write", "file_tree",
+        }
 
 
 class TestFileRead:
@@ -453,3 +456,94 @@ class TestFileWrite:
         })
         assert "line2" in result
         assert "line3" in result
+
+
+@pytest.fixture
+def cwd_guard(tmp_path):
+    """创建带 cwd 的 SandboxGuard"""
+    work_dir = tmp_path / "workspace"
+    work_dir.mkdir()
+    return SandboxGuard(Sandbox(cwd=str(work_dir))), work_dir
+
+
+@pytest.fixture
+def cwd_tools(cwd_guard):
+    """创建带 cwd 的文件工具"""
+    guard, cwd = cwd_guard
+    return {t.name: t for t in create_file_tools(guard, cwd=cwd)}, cwd
+
+
+class TestFileTree:
+    """file_tree 工具测试"""
+
+    async def test_tree_empty_directory(self, cwd_tools):
+        """空目录应返回空树"""
+        tools, cwd = cwd_tools
+        result = await tools["file_tree"].execute({"path": str(cwd)})
+        assert "0 个文件" in result or "0 个目录" in result
+
+    async def test_tree_with_files_and_dirs(self, cwd_tools):
+        """应正确展示文件和目录结构"""
+        tools, cwd = cwd_tools
+        (cwd / "file1.txt").write_text("hello")
+        (cwd / "subdir").mkdir()
+        (cwd / "subdir" / "file2.txt").write_text("world")
+        result = await tools["file_tree"].execute({"path": str(cwd)})
+        assert "file1.txt" in result
+        assert "subdir" in result
+        assert "file2.txt" in result
+
+    async def test_tree_max_depth(self, cwd_tools):
+        """max_depth 应限制递归深度"""
+        tools, cwd = cwd_tools
+        deep = cwd / "a" / "b" / "c"
+        deep.mkdir(parents=True)
+        (deep / "deep.txt").write_text("deep")
+        result = await tools["file_tree"].execute({
+            "path": str(cwd), "max_depth": 1,
+        })
+        assert "a" in result
+        assert "[...]" in result
+        assert "deep.txt" not in result
+
+    async def test_tree_ignores_special_dirs(self, cwd_tools):
+        """应忽略 .git、__pycache__ 等目录"""
+        tools, cwd = cwd_tools
+        (cwd / ".git").mkdir()
+        (cwd / ".git" / "config").write_text("cfg")
+        (cwd / "src").mkdir()
+        (cwd / "src" / "main.py").write_text("pass")
+        result = await tools["file_tree"].execute({"path": str(cwd)})
+        assert ".git" not in result
+        assert "main.py" in result
+
+    async def test_tree_default_path_uses_cwd(self, cwd_tools):
+        """未指定 path 时应使用 cwd"""
+        tools, cwd = cwd_tools
+        (cwd / "default.txt").write_text("hello")
+        result = await tools["file_tree"].execute({})
+        assert "default.txt" in result
+
+    async def test_tree_sandbox_denied(self, cwd_tools):
+        """沙箱外路径应被拒绝"""
+        tools, cwd = cwd_tools
+        result = await tools["file_tree"].execute({"path": "/etc"})
+        assert "权限" in result or "沙箱" in result
+
+    async def test_tree_shows_summary(self, cwd_tools):
+        """应显示目录和文件数量统计"""
+        tools, cwd = cwd_tools
+        (cwd / "a.txt").write_text("a")
+        (cwd / "b.txt").write_text("b")
+        (cwd / "sub").mkdir()
+        result = await tools["file_tree"].execute({"path": str(cwd)})
+        assert "1 个目录" in result
+        assert "2 个文件" in result
+
+    async def test_tree_uses_tree_format(self, cwd_tools):
+        """应使用树形符号（├── └──）"""
+        tools, cwd = cwd_tools
+        (cwd / "a.txt").write_text("a")
+        (cwd / "b.txt").write_text("b")
+        result = await tools["file_tree"].execute({"path": str(cwd)})
+        assert "├──" in result or "└──" in result

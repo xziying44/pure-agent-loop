@@ -24,6 +24,13 @@ BINARY_EXTENSIONS = frozenset({
     ".sqlite", ".db",
 })
 
+# 忽略的目录名
+IGNORED_DIRS = frozenset({
+    ".git", "__pycache__", "node_modules", ".venv", "venv",
+    ".tox", ".mypy_cache", ".pytest_cache", "dist", "build",
+    ".idea", ".vscode", ".eggs", "*.egg-info",
+})
+
 
 def _is_binary(path: Path) -> bool:
     """检测文件是否为二进制文件"""
@@ -78,17 +85,34 @@ def _list_directory(path: Path) -> str:
     return "\n".join(lines)
 
 
-def create_file_tools(guard: SandboxGuard) -> list[Tool]:
+def create_file_tools(guard: SandboxGuard, cwd: Path | None = None) -> list[Tool]:
     """创建文件工具列表
 
     通过闭包捕获 SandboxGuard 实例，实现路径权限控制。
 
     Args:
         guard: 沙箱路径验证器
+        cwd: 工作目录，用于解析相对路径和作为默认路径
 
     Returns:
-        包含 5 个文件工具的列表
+        包含文件工具的列表
     """
+
+    def _resolve_path(path_str: str | None, default: Path | None = None) -> Path:
+        """解析路径：有 cwd 时相对路径基于 cwd 解析，否则直接 resolve"""
+        if path_str is None:
+            if default is not None:
+                return default
+            if cwd is not None:
+                return cwd
+            readable = guard._all_readable_paths()
+            if readable:
+                return readable[0]
+            raise ValueError("没有可用的默认路径")
+        p = Path(path_str)
+        if not p.is_absolute() and cwd is not None:
+            return (cwd / p).resolve()
+        return p.resolve()
 
     def file_read(file_path: str, offset: int | None = None, limit: int | None = None) -> str:
         """读取文件内容
@@ -115,13 +139,6 @@ def create_file_tools(guard: SandboxGuard) -> list[Tool]:
             return f"⚠️ 无法读取二进制文件: '{file_path}'"
 
         return _read_file(path, offset, limit)
-
-    # 忽略的目录名
-    IGNORED_DIRS = frozenset({
-        ".git", "__pycache__", "node_modules", ".venv", "venv",
-        ".tox", ".mypy_cache", ".pytest_cache", "dist", "build",
-        ".idea", ".vscode", ".eggs", "*.egg-info",
-    })
 
     def file_search(pattern: str, path: str | None = None) -> str:
         """按文件名模式搜索文件
@@ -329,6 +346,63 @@ def create_file_tools(guard: SandboxGuard) -> list[Tool]:
         diff_text = "".join(diff)
         return f"✅ 已重写文件: {file_path}\n\n{diff_text}"
 
+    def _build_tree(
+        dir_path: Path,
+        prefix: str,
+        max_depth: int,
+        current_depth: int,
+        stats: dict,
+    ) -> list[str]:
+        """递归构建树形结构的行列表"""
+        if current_depth > max_depth:
+            return [f"{prefix}[...]"]
+
+        entries = sorted(dir_path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
+        # 过滤忽略目录
+        entries = [e for e in entries if e.name not in IGNORED_DIRS]
+
+        lines = []
+        for i, entry in enumerate(entries):
+            is_last = (i == len(entries) - 1)
+            connector = "└── " if is_last else "├── "
+
+            if entry.is_dir():
+                stats["dirs"] += 1
+                lines.append(f"{prefix}{connector}{entry.name}/")
+                extension = "    " if is_last else "│   "
+                lines.extend(
+                    _build_tree(entry, prefix + extension, max_depth, current_depth + 1, stats)
+                )
+            else:
+                stats["files"] += 1
+                lines.append(f"{prefix}{connector}{entry.name}")
+
+        return lines
+
+    def file_tree(path: str | None = None, max_depth: int | None = None) -> str:
+        """查看目录的树形结构
+
+        Args:
+            path: 目标目录路径，默认为工作目录
+            max_depth: 递归深度限制，默认为 3
+        """
+        depth = max_depth if max_depth is not None else 3
+        target = _resolve_path(path)
+        guard.check_read(target)
+
+        if not target.exists():
+            return f"⚠️ 目录不存在: '{path}'"
+        if not target.is_dir():
+            return f"⚠️ 不是目录: '{path}'"
+
+        stats = {"dirs": 0, "files": 0}
+        lines = [f"{target.name}/"]
+        lines.extend(_build_tree(target, "", depth, 1, stats))
+        lines.append("")
+        lines.append(f"{stats['dirs']} 个目录，{stats['files']} 个文件")
+
+        return "\n".join(lines)
+
     # 构建 Tool 对象列表
     from .tool import _build_tool
     return [
@@ -337,4 +411,5 @@ def create_file_tools(guard: SandboxGuard) -> list[Tool]:
         _build_tool(file_grep),
         _build_tool(file_edit),
         _build_tool(file_write),
+        _build_tool(file_tree),
     ]
