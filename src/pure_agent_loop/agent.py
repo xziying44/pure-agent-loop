@@ -285,6 +285,15 @@ class Agent:
         events = list(self.run_stream(task, messages=messages))
         return self._build_result(events)
 
+    def conversation(self) -> "Conversation":
+        """创建一个新的多轮对话会话
+
+        Returns:
+            Conversation: 独立的对话会话实例
+        """
+        from .conversation import Conversation
+        return Conversation(self)
+
     def _build_result(self, events: list[Event]) -> AgentResult:
         """从事件列表构建 AgentResult"""
         # 查找结束事件
