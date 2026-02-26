@@ -639,12 +639,12 @@ class TestReactLoopHardLimit:
 
         # 第 2 次 LLM 调用（最后一步）应该没有 tools 参数
         assert llm._call_history[1]["tools"] is None
-        # 消息中应包含 hard_limit_prompt
+        # 消息中应包含 hard_limit_prompt（以 user 角色注入，避免部分模型不支持中途 system）
         last_messages = llm._call_history[1]["messages"]
-        system_contents = [
-            m["content"] for m in last_messages if m["role"] == "system"
+        injected_contents = [
+            m["content"] for m in last_messages if m["role"] == "user"
         ]
-        assert any(limits.hard_limit_prompt in c for c in system_contents)
+        assert any(limits.hard_limit_prompt in c for c in injected_contents)
 
     async def test_hard_limit_passes_tools_before_last_step(self):
         """硬模式未到最后一步时应正常传递 tools"""

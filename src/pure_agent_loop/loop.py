@@ -114,9 +114,10 @@ class ReactLoop:
             current_tools = tool_schemas
             if is_hard_limit_step:
                 # 最后一步：禁用工具，注入硬限制提示
+                # 使用 user 角色避免部分模型不支持中途 system 消息
                 current_tools = None
                 msg_history.append(
-                    {"role": "system", "content": self._limits.hard_limit_prompt}
+                    {"role": "user", "content": f"[System] {self._limits.hard_limit_prompt}"}
                 )
 
             # ---- 调用 LLM ----
@@ -263,7 +264,7 @@ class ReactLoop:
                     reason=limit_result.reason,
                     prompt=limit_result.prompt,
                 )
-                # 注入系统提示
+                # 注入系统提示（使用 user 角色避免部分模型不支持中途 system 消息）
                 msg_history.append(
-                    {"role": "system", "content": limit_result.prompt}
+                    {"role": "user", "content": f"[System] {limit_result.prompt}"}
                 )
