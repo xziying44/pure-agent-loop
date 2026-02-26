@@ -138,8 +138,8 @@ class ReactLoop:
                 )
                 return
 
-            # 累加 token
-            checker.add_tokens(response.usage.total_tokens)
+            # 累加生成 token（仅 completion，避免 prompt 重复计算导致虚高）
+            checker.add_tokens(response.usage.completion_tokens)
 
             # ---- 处理响应 ----
             # 产出 REASONING 事件（如果启用且有内容）

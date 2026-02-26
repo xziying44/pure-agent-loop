@@ -9,11 +9,11 @@ class TestLoopLimits:
     """LoopLimits 配置测试"""
 
     def test_default_values(self):
-        """默认值：无步数限制、软模式、100k token"""
+        """默认值：无步数限制、软模式、200k token"""
         limits = LoopLimits()
         assert limits.max_steps is None
         assert limits.step_limit_mode == "soft"
-        assert limits.max_tokens == 100_000
+        assert limits.max_tokens == 200_000
         assert limits.doom_loop_threshold == 3
 
     def test_custom_values(self):

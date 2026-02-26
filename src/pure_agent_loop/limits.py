@@ -34,7 +34,7 @@ class LoopLimits:
     Attributes:
         max_steps: 步数上限，None 表示无限制
         step_limit_mode: 步数限制模式 - "soft"（注入提示继续）或 "hard"（禁用工具终止）
-        max_tokens: 累计 token 上限（始终为硬限制）
+        max_tokens: 累计生成 token 上限（仅计 completion_tokens，始终为硬限制）
         doom_loop_threshold: 连续相同工具调用的检测阈值
         soft_limit_prompt: 软限制提示词模板（支持 {current_steps} 占位符）
         soft_limit_interval: 软模式下首次触发后的重复提醒间隔（默认等于 max_steps）
@@ -43,7 +43,7 @@ class LoopLimits:
 
     max_steps: int | None = None
     step_limit_mode: str = "soft"
-    max_tokens: int = 100_000
+    max_tokens: int = 200_000
     doom_loop_threshold: int = 3
 
     soft_limit_prompt: str = DEFAULT_SOFT_LIMIT_PROMPT
@@ -108,7 +108,7 @@ class LimitChecker:
         )
 
     def add_tokens(self, tokens: int) -> None:
-        """累加 token 用量"""
+        """累加生成 token 用量（仅 completion_tokens）"""
         self.total_tokens += tokens
 
     def record_tool_call(self, tool_name: str, arguments_json: str) -> None:
