@@ -79,3 +79,50 @@ class Conversation:
         async for event in self.send_stream(task):
             events.append(event)
         return self._agent._build_result(events)
+
+    def send_stream_sync(self, task: str) -> Iterator[Event]:
+        """同步流式发送
+
+        Args:
+            task: 任务描述
+
+        Yields:
+            Event: 执行过程中的结构化事件
+        """
+        try:
+            asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                new_loop = asyncio.new_event_loop()
+
+                async def _collect():
+                    events = []
+                    async for event in self.send_stream(task):
+                        events.append(event)
+                    return events
+
+                future = pool.submit(new_loop.run_until_complete, _collect())
+                events = future.result()
+                new_loop.close()
+        except RuntimeError:
+            async def _collect():
+                events = []
+                async for event in self.send_stream(task):
+                    events.append(event)
+                return events
+
+            events = asyncio.run(_collect())
+
+        yield from events
+
+    def send_sync(self, task: str) -> AgentResult:
+        """同步发送
+
+        Args:
+            task: 任务描述
+
+        Returns:
+            AgentResult: 执行结果
+        """
+        events = list(self.send_stream_sync(task))
+        return self._agent._build_result(events)

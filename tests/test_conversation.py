@@ -172,3 +172,44 @@ class TestConversationSend:
         assert r1.content == "第一轮"
         assert r2.content == "第二轮"
         assert len(r2.messages) > len(r1.messages)
+
+
+class TestConversationSync:
+    """同步方法测试"""
+
+    def test_send_sync_returns_result(self):
+        """send_sync 应返回 AgentResult"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm)
+        conv = agent.conversation()
+
+        result = conv.send_sync("打个招呼")
+        assert isinstance(result, AgentResult)
+        assert result.content == "你好"
+
+    def test_send_stream_sync_yields_events(self):
+        """send_stream_sync 应产出事件"""
+        mock_llm = MockLLM([_text_response("你好")])
+        agent = Agent(llm=mock_llm)
+        conv = agent.conversation()
+
+        events = list(conv.send_stream_sync("打个招呼"))
+        types = [e.type for e in events]
+        assert EventType.LOOP_START in types
+        assert EventType.LOOP_END in types
+
+    def test_send_sync_multi_turn(self):
+        """同步多轮对话应正常续接"""
+        mock_llm = MockLLM([
+            _text_response("第一轮"),
+            _text_response("第二轮"),
+        ])
+        agent = Agent(llm=mock_llm)
+        conv = agent.conversation()
+
+        r1 = conv.send_sync("问题1")
+        r2 = conv.send_sync("追问")
+
+        assert r1.content == "第一轮"
+        assert r2.content == "第二轮"
+        assert len(r2.messages) > len(r1.messages)
