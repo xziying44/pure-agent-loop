@@ -876,3 +876,41 @@ class TestCoerceArgumentsEnhanced:
         properties = {"price": {"type": "number"}}
 
         assert _coerce_arguments({"price": " 1.23 "}, properties)["price"] == 1.23
+
+    def test_backward_compatibility_correct_types(self):
+        """已经是正确类型的参数不应该被转换"""
+        properties = {
+            "count": {"type": "integer"},
+            "flag": {"type": "boolean"},
+            "price": {"type": "number"},
+        }
+
+        args = {"count": 123, "flag": True, "price": 1.23}
+        result = _coerce_arguments(args, properties)
+
+        assert result["count"] == 123
+        assert result["flag"] is True
+        assert result["price"] == 1.23
+
+    def test_backward_compatibility_none_values(self):
+        """None 值应该保持 None"""
+        properties = {"count": {"type": "integer"}}
+
+        result = _coerce_arguments({"count": None}, properties)
+        assert result["count"] is None
+
+    def test_backward_compatibility_conversion_failure(self):
+        """转换失败时应该保留原值"""
+        properties = {"count": {"type": "integer"}}
+
+        # 无法转换的字符串应该保留原值
+        result = _coerce_arguments({"count": "abc"}, properties)
+        assert result["count"] == "abc"
+
+    def test_backward_compatibility_unknown_parameters(self):
+        """不在 schema 中的参数应该原样保留"""
+        properties = {"count": {"type": "integer"}}
+
+        result = _coerce_arguments({"count": "123", "unknown": "value"}, properties)
+        assert result["count"] == 123
+        assert result["unknown"] == "value"
