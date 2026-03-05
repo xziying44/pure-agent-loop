@@ -795,3 +795,44 @@ class TestArgumentTypeCoercion:
         # LLM 返回了字符串形式的 offset
         result = await read_file.execute({"path": "test.txt", "offset": "265"})
         assert result == "test.txt:265"
+
+
+class TestCoerceArgumentsEnhanced:
+    """参数转换增强测试"""
+
+    def test_boolean_conversion_case_insensitive(self):
+        """布尔值转换应该大小写不敏感"""
+        properties = {"flag": {"type": "boolean"}}
+
+        # 真值测试
+        assert _coerce_arguments({"flag": "True"}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": "TRUE"}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": "true"}, properties)["flag"] is True
+
+    def test_boolean_conversion_extended_formats(self):
+        """布尔值转换应该支持更多格式"""
+        properties = {"flag": {"type": "boolean"}}
+
+        # 真值：yes, on, t, y
+        assert _coerce_arguments({"flag": "yes"}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": "YES"}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": "on"}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": "ON"}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": "t"}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": "y"}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": "1"}, properties)["flag"] is True
+
+        # 假值：其他所有字符串
+        assert _coerce_arguments({"flag": "false"}, properties)["flag"] is False
+        assert _coerce_arguments({"flag": "no"}, properties)["flag"] is False
+        assert _coerce_arguments({"flag": "off"}, properties)["flag"] is False
+        assert _coerce_arguments({"flag": "0"}, properties)["flag"] is False
+        assert _coerce_arguments({"flag": "random"}, properties)["flag"] is False
+
+    def test_boolean_conversion_strips_whitespace(self):
+        """布尔值转换应该去除首尾空格"""
+        properties = {"flag": {"type": "boolean"}}
+
+        assert _coerce_arguments({"flag": " true "}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": "  yes  "}, properties)["flag"] is True
+        assert _coerce_arguments({"flag": " false "}, properties)["flag"] is False

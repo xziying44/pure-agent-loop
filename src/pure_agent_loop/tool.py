@@ -52,7 +52,8 @@ def _coerce_arguments(
             elif expected_type == "number":
                 coerced[key] = float(value)
             elif expected_type == "boolean":
-                coerced[key] = value.lower() in ("true", "1", "yes")
+                normalized = value.lower().strip()
+                coerced[key] = normalized in ("true", "1", "yes", "on", "t", "y")
             elif expected_type in ("array", "object"):
                 coerced[key] = json.loads(value)
             else:
