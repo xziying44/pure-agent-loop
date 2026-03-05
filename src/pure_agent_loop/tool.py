@@ -111,9 +111,8 @@ def _parse_google_docstring(docstring: str) -> tuple[str, dict[str, str]]:
 
 def _get_json_type(python_type: type) -> str:
     """将 Python 类型转换为 JSON Schema 类型"""
-    # 处理 Optional (X | None)
-    origin = getattr(python_type, "__origin__", None)
-    if origin is type(int | str):  # types.UnionType (Python 3.10+)
+    # 处理 Optional (X | None) - Python 3.10+ 的 UnionType
+    if isinstance(python_type, type(int | str)):  # types.UnionType
         args = python_type.__args__
         non_none = [a for a in args if a is not type(None)]
         if non_none:

@@ -937,3 +937,37 @@ class TestCoerceArgumentsEnhanced:
         })
 
         assert result == "count=1000, enabled=True, price=1234.56"
+
+    async def test_optional_parameter_type_detection(self):
+        """测试可选参数（X | None）的类型正确识别"""
+        from pure_agent_loop.tool import _build_tool
+
+        def file_read(path: str, offset: int | None = None, limit: int | None = None) -> str:
+            """读取文件
+
+            Args:
+                path: 文件路径
+                offset: 起始行号
+                limit: 最多读取行数
+            """
+            # 验证参数类型
+            assert isinstance(path, str)
+            if offset is not None:
+                assert isinstance(offset, int), f"offset 应该是 int，实际是 {type(offset)}"
+            if limit is not None:
+                assert isinstance(limit, int), f"limit 应该是 int，实际是 {type(limit)}"
+            return f"path={path}, offset={offset}, limit={limit}"
+
+        tool_obj = _build_tool(file_read)
+
+        # 验证 schema 中的类型定义
+        assert tool_obj.parameters["properties"]["offset"]["type"] == "integer"
+        assert tool_obj.parameters["properties"]["limit"]["type"] == "integer"
+
+        # 测试字符串参数会被正确转换
+        result = await tool_obj.execute({
+            "path": "test.txt",
+            "offset": "10",
+            "limit": "100"
+        })
+        assert result == "path=test.txt, offset=10, limit=100"
