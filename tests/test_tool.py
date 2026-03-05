@@ -836,3 +836,43 @@ class TestCoerceArgumentsEnhanced:
         assert _coerce_arguments({"flag": " true "}, properties)["flag"] is True
         assert _coerce_arguments({"flag": "  yes  "}, properties)["flag"] is True
         assert _coerce_arguments({"flag": " false "}, properties)["flag"] is False
+
+    def test_integer_conversion_with_separators(self):
+        """整数转换应该支持千分位分隔符和下划线"""
+        properties = {"count": {"type": "integer"}}
+
+        # 千分位分隔符
+        assert _coerce_arguments({"count": "1,000"}, properties)["count"] == 1000
+        assert _coerce_arguments({"count": "1,234,567"}, properties)["count"] == 1234567
+
+        # Python 风格下划线
+        assert _coerce_arguments({"count": "1_000"}, properties)["count"] == 1000
+        assert _coerce_arguments({"count": "1_234_567"}, properties)["count"] == 1234567
+
+        # 混合使用（虽然不推荐，但应该能处理）
+        assert _coerce_arguments({"count": "1,000_000"}, properties)["count"] == 1000000
+
+    def test_integer_conversion_strips_whitespace(self):
+        """整数转换应该去除首尾空格"""
+        properties = {"count": {"type": "integer"}}
+
+        assert _coerce_arguments({"count": " 123 "}, properties)["count"] == 123
+        assert _coerce_arguments({"count": "  456  "}, properties)["count"] == 456
+
+    def test_float_conversion_with_separators(self):
+        """浮点数转换应该支持千分位分隔符"""
+        properties = {"price": {"type": "number"}}
+
+        # 千分位分隔符
+        assert _coerce_arguments({"price": "1,234.56"}, properties)["price"] == 1234.56
+        assert _coerce_arguments({"price": "1_234.56"}, properties)["price"] == 1234.56
+
+        # 科学计数法（原生支持）
+        assert _coerce_arguments({"price": "1.23e5"}, properties)["price"] == 123000.0
+        assert _coerce_arguments({"price": "1.23E5"}, properties)["price"] == 123000.0
+
+    def test_float_conversion_strips_whitespace(self):
+        """浮点数转换应该去除首尾空格"""
+        properties = {"price": {"type": "number"}}
+
+        assert _coerce_arguments({"price": " 1.23 "}, properties)["price"] == 1.23

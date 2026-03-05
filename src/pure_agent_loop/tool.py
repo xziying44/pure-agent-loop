@@ -48,9 +48,11 @@ def _coerce_arguments(
         expected_type = properties[key].get("type")
         try:
             if expected_type == "integer":
-                coerced[key] = int(value)
+                cleaned = value.replace(",", "").replace("_", "").strip()
+                coerced[key] = int(cleaned)
             elif expected_type == "number":
-                coerced[key] = float(value)
+                cleaned = value.replace(",", "").replace("_", "").strip()
+                coerced[key] = float(cleaned)
             elif expected_type == "boolean":
                 normalized = value.lower().strip()
                 coerced[key] = normalized in ("true", "1", "yes", "on", "t", "y")
