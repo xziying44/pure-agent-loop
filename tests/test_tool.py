@@ -914,3 +914,26 @@ class TestCoerceArgumentsEnhanced:
         result = _coerce_arguments({"count": "123", "unknown": "value"}, properties)
         assert result["count"] == 123
         assert result["unknown"] == "value"
+
+    async def test_integration_with_tool_execute(self):
+        """集成测试：通过 Tool.execute() 验证参数转换"""
+
+        @tool
+        def process_data(count: int, enabled: bool, price: float) -> str:
+            """处理数据
+
+            Args:
+                count: 数量
+                enabled: 是否启用
+                price: 价格
+            """
+            return f"count={count}, enabled={enabled}, price={price}"
+
+        # 测试各种格式的参数
+        result = await process_data.execute({
+            "count": "1,000",
+            "enabled": "YES",
+            "price": "1_234.56"
+        })
+
+        assert result == "count=1000, enabled=True, price=1234.56"
